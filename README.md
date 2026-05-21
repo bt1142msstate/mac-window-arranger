@@ -90,6 +90,8 @@ The script keeps the bundle identifier, install path, and local signing requirem
 
 For public distribution, replace the local signing identity with an Apple Developer ID Application certificate and notarize the app.
 
-## Open Source
+## Source Availability
 
-Mac Window Arranger is open source under the MIT License. See [LICENSE](LICENSE) for details. The Mac App Store version is planned as the easiest supported install path, while this repository remains available for users who want to build it themselves or create a custom version.
+Mac Window Arranger is source-available, not MIT/open-source. You can inspect the code, build it for personal or internal non-commercial use, and modify it for your own needs.
+
+The Mac App Store version is planned as the easiest supported install path. Redistribution, resale, paid use, publishing modified builds, app-store submission, and use of the app name/icon as your own product require prior written permission. See [LICENSE](LICENSE) for details.

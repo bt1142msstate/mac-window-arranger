@@ -132,9 +132,9 @@ drawText("Preset sizing for front or all windows.", x: 222, y: 782, width: 390, 
 
 drawPill("Arrange Selected", x: 1012, y: 756, width: 230, fill: color(0x0a84ff))
 
-drawPill("SwiftUI", x: 970, y: 246, width: 118, fill: color(0x31363d))
-drawPill("macOS", x: 1106, y: 246, width: 116, fill: color(0x31363d))
-drawPill("MIT", x: 1240, y: 246, width: 78, fill: color(0x31363d))
+drawPill("SwiftUI", x: 902, y: 246, width: 118, fill: color(0x31363d))
+drawPill("macOS", x: 1038, y: 246, width: 116, fill: color(0x31363d))
+drawPill("Source avail.", x: 1172, y: 246, width: 174, fill: color(0x31363d))
 
 image.unlockFocus()
 

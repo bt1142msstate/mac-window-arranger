@@ -1,21 +1,66 @@
-MIT License
+Mac Window Arranger Source-Available License 1.0
 
 Copyright (c) 2026 Brandon Temple
+All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This license is intended to let people inspect, learn from, build, and customize
+Mac Window Arranger for their own use while reserving commercial distribution
+and store publication rights for the copyright holder.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. Permitted Use
+
+Subject to the restrictions below, you may:
+
+- view and study the source code;
+- build and run the software for personal, educational, or internal
+  non-commercial use;
+- modify the software for your own personal, educational, or internal
+  non-commercial use; and
+- make forks or branches solely to submit proposed changes back to the original
+  project repository.
+
+2. Attribution
+
+You must keep this license file and all copyright, attribution, and notices in
+all copies or substantial portions of the software. You may not misrepresent the
+origin of the software or present the software as your own original work.
+
+3. Restrictions
+
+Without prior written permission from the copyright holder, you may not:
+
+- sell, rent, lease, sublicense, or otherwise commercialize the software or any
+  modified version of it;
+- publish, distribute, or make available compiled copies, installers, bundles,
+  or modified versions of the software to third parties;
+- submit, publish, or distribute the software or any modified version of it
+  through the Mac App Store, any other app store, a package manager, a download
+  site, or any marketplace;
+- use the name "Mac Window Arranger", "Window Arranger", the app icon, or other
+  project branding in a way that suggests endorsement, affiliation, or an
+  official release unless the release is authorized by the copyright holder; or
+- remove or obscure copyright, attribution, license, privacy, or provenance
+  notices.
+
+4. Contributions
+
+By submitting a contribution to the original project repository, you grant the
+copyright holder a perpetual, worldwide, royalty-free license to use, reproduce,
+modify, distribute, sublicense, and commercialize that contribution as part of
+Mac Window Arranger.
+
+5. Termination
+
+Your rights under this license terminate automatically if you violate its terms.
+After termination, you must stop using, building, modifying, and distributing
+the software and delete any unauthorized copies in your possession or control.
+
+6. No Warranty
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND NONINFRINGEMENT. IN NO EVENT SHALL
+THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM,
+OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
