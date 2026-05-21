@@ -12,14 +12,6 @@ struct ContentView: View {
 
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .center, spacing: 16) {
-                    HeaderView()
-                        .layoutPriority(1)
-
-                    WorkflowModePicker(store: store)
-                        .frame(width: 240)
-                }
-
                 if !store.hasAccessibilityAccess {
                     PermissionBanner(
                         promptAction: store.requestAccessibilityAccess,
@@ -40,6 +32,11 @@ struct ContentView: View {
         .background(WindowBackground())
         .tint(.blue)
         .toolbar {
+            ToolbarItem(placement: .principal) {
+                WorkflowModePicker(store: store)
+                    .frame(width: 126)
+            }
+
             ToolbarItem {
                 Button(action: store.compactToDock) {
                     Label("Mini Mode", systemImage: "minus.rectangle")
@@ -82,35 +79,71 @@ struct ContentView: View {
 
 private struct WorkflowModePicker: View {
     @Bindable var store: WindowArrangerStore
+    @State private var visualMode: WindowWorkflowMode?
+    @State private var pendingMode: WindowWorkflowMode?
+
+    private let pillTransitionDuration: TimeInterval = 0.22
 
     var body: some View {
-        Picker("Mode", selection: workflowModeBinding) {
+        Picker("Mode", selection: visualWorkflowModeBinding) {
             ForEach(WindowWorkflowMode.allCases) { mode in
-                Label(mode.title, systemImage: mode.symbolName)
+                Image(systemName: mode.symbolName)
                     .tag(mode)
+                    .help(mode.title)
+                    .accessibilityLabel(mode.title)
             }
         }
         .pickerStyle(.segmented)
         .labelsHidden()
-        .disabled(store.isExecuting || store.isPickingWindow)
+        .disabled(store.isExecuting || store.isPickingWindow || pendingMode != nil)
+        .onAppear {
+            visualMode = store.workflowMode
+        }
+        .onChange(of: store.workflowMode) { _, newMode in
+            guard pendingMode == nil else {
+                return
+            }
+
+            visualMode = newMode
+        }
     }
 
-    private var workflowModeBinding: Binding<WindowWorkflowMode> {
+    private var visualWorkflowModeBinding: Binding<WindowWorkflowMode> {
         Binding(
             get: {
-                store.workflowMode
+                visualMode ?? store.workflowMode
             },
             set: { newMode in
-                guard newMode != store.workflowMode else {
+                let currentMode = visualMode ?? store.workflowMode
+
+                guard newMode != currentMode, pendingMode == nil else {
                     return
                 }
 
-                AppDelegate.shared?.fitMainWindowToContentSize(
-                    newMode.contentSize,
-                    prepareContent: {
-                        store.workflowMode = newMode
+                visualMode = newMode
+                pendingMode = newMode
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + pillTransitionDuration) {
+                    guard pendingMode == newMode else {
+                        return
                     }
-                )
+
+                    guard let appDelegate = AppDelegate.shared else {
+                        store.workflowMode = newMode
+                        pendingMode = nil
+                        return
+                    }
+
+                    appDelegate.fitMainWindowToContentSize(
+                        newMode.contentSize,
+                        prepareContent: {
+                            store.workflowMode = newMode
+                        },
+                        completion: {
+                            pendingMode = nil
+                        }
+                    )
+                }
             }
         )
     }

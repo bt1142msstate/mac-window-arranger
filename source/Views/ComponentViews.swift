@@ -141,25 +141,6 @@ private struct CompactLayoutPicker: View {
     }
 }
 
-struct HeaderView: View {
-    var body: some View {
-        HStack(spacing: 14) {
-            AppIconView()
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Window Arranger")
-                    .font(.title2.weight(.semibold))
-
-                Text("Resize windows, build layouts, or restore saved workspaces.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-        }
-    }
-}
-
 struct AppIconView: View {
     var size: CGFloat = 52
     var cornerRadius: CGFloat = 12

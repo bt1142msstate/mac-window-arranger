@@ -69,8 +69,8 @@ enum WindowWorkflowMode: String, CaseIterable, Identifiable, Hashable {
 
     var contentSize: CGSize {
         switch self {
-        case .resize: CGSize(width: 760, height: 390)
-        case .arrange: CGSize(width: 760, height: 560)
+        case .resize: CGSize(width: 760, height: 300)
+        case .arrange: CGSize(width: 760, height: 500)
         }
     }
 }
