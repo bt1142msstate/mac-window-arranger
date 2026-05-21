@@ -5,14 +5,20 @@ struct ContentView: View {
     @State private var store = WindowArrangerStore()
 
     private let appRefreshTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
-    private let contentSize = CGSize(width: 900, height: 590)
 
     var body: some View {
         @Bindable var store = store
+        let contentSize = store.workflowMode.contentSize
 
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                HeaderView()
+                HStack(alignment: .center, spacing: 16) {
+                    HeaderView()
+                        .layoutPriority(1)
+
+                    WorkflowModePicker(store: store)
+                        .frame(width: 240)
+                }
 
                 if !store.hasAccessibilityAccess {
                     PermissionBanner(
@@ -21,20 +27,11 @@ struct ContentView: View {
                     )
                 }
 
-                HStack(alignment: .top, spacing: 14) {
-                    VStack(spacing: 14) {
-                        SavedLayoutsSection(store: store)
-                        LayoutBuilderSection(store: store)
-                    }
-                    .frame(width: 520, alignment: .top)
-
-                    VStack(spacing: 14) {
-                        TargetSection(store: store)
-                        ResizeSection(store: store)
-                        OptionsSection(store: store)
-                        PrimaryActionSection(store: store)
-                    }
-                    .frame(width: 330, alignment: .top)
+                switch store.workflowMode {
+                case .resize:
+                    ResizeWorkflowSection(store: store)
+                case .arrange:
+                    ArrangeWorkflowSection(store: store)
                 }
             }
             .padding(18)
@@ -52,6 +49,7 @@ struct ContentView: View {
         }
         .onAppear {
             store.start()
+            AppDelegate.shared?.fitMainWindowToContentSize(contentSize, animated: false)
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             store.refreshAccessibilityAccess()
@@ -82,57 +80,141 @@ struct ContentView: View {
     }
 }
 
+private struct WorkflowModePicker: View {
+    @Bindable var store: WindowArrangerStore
+
+    var body: some View {
+        Picker("Mode", selection: workflowModeBinding) {
+            ForEach(WindowWorkflowMode.allCases) { mode in
+                Label(mode.title, systemImage: mode.symbolName)
+                    .tag(mode)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .disabled(store.isExecuting || store.isPickingWindow)
+    }
+
+    private var workflowModeBinding: Binding<WindowWorkflowMode> {
+        Binding(
+            get: {
+                store.workflowMode
+            },
+            set: { newMode in
+                guard newMode != store.workflowMode else {
+                    return
+                }
+
+                let currentSize = store.workflowMode.contentSize
+                let newSize = newMode.contentSize
+                if newSize.height < currentSize.height || newSize.width < currentSize.width {
+                    store.workflowMode = newMode
+                    DispatchQueue.main.async {
+                        AppDelegate.shared?.fitMainWindowToContentSize(newSize)
+                    }
+                    return
+                }
+
+                AppDelegate.shared?.fitMainWindowToContentSize(newMode.contentSize) {
+                    store.workflowMode = newMode
+                }
+            }
+        )
+    }
+}
+
+private struct ResizeWorkflowSection: View {
+    @Bindable var store: WindowArrangerStore
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            VStack(spacing: 14) {
+                TargetSection(store: store)
+                ResizeSection(store: store)
+            }
+            .frame(width: 400, alignment: .top)
+
+            VStack(spacing: 14) {
+                OptionsSection(store: store)
+                PrimaryActionSection(store: store)
+            }
+            .frame(width: 310, alignment: .top)
+        }
+    }
+}
+
+private struct ArrangeWorkflowSection: View {
+    @Bindable var store: WindowArrangerStore
+
+    var body: some View {
+        VStack(spacing: 14) {
+            SavedLayoutsSection(store: store)
+            LayoutBuilderSection(store: store)
+
+            if !store.executionResult.isEmpty {
+                StatusBanner(text: store.executionResult, kind: store.resultKind)
+            }
+        }
+    }
+}
+
 private struct SavedLayoutsSection: View {
     @Bindable var store: WindowArrangerStore
 
     var body: some View {
         Panel(title: "Saved Layouts", symbolName: "rectangle.stack") {
-            VStack(alignment: .leading, spacing: 9) {
-                HStack(spacing: 10) {
-                    Picker("Saved Layout", selection: $store.selectedLayoutID) {
-                        if store.savedLayouts.isEmpty {
-                            Text("No saved layouts").tag("")
-                        } else {
-                            ForEach(store.savedLayouts) { layout in
-                                Text(layout.name).tag(layout.id.uuidString)
-                            }
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(maxWidth: .infinity)
-                    .disabled(store.isExecuting || store.savedLayouts.isEmpty)
-
-                    Text("\(store.savedLayouts.count) saved")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .frame(minWidth: 54, alignment: .trailing)
-                }
-
-                HStack(spacing: 10) {
+            HStack(alignment: .top, spacing: 14) {
+                VStack(alignment: .leading, spacing: 10) {
                     TextField("Layout name", text: $store.layoutName)
                         .textFieldStyle(.roundedBorder)
                         .disabled(store.isExecuting)
 
-                    Button(action: store.saveCurrentLayout) {
-                        Label("Save", systemImage: "square.and.arrow.down")
+                    SavedLayoutPreview(layout: store.selectedSavedLayout)
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 8) {
+                        Picker("Saved Layout", selection: $store.selectedLayoutID) {
+                            if store.savedLayouts.isEmpty {
+                                Text("No saved layouts").tag("")
+                            } else {
+                                ForEach(store.savedLayouts) { layout in
+                                    Text(layout.name).tag(layout.id.uuidString)
+                                }
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(maxWidth: .infinity)
+                        .disabled(store.isExecuting || store.savedLayouts.isEmpty)
+
+                        MetricBadge(text: "\(store.savedLayouts.count) saved")
                     }
-                    .buttonStyle(.bordered)
-                    .disabled(!store.canSaveLayout)
 
                     Button(action: store.applySelectedLayout) {
                         Label("Open & Arrange", systemImage: "play.rectangle")
+                            .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(!store.canApplyLayout)
 
-                    Button(role: .destructive, action: store.deleteSelectedLayout) {
-                        Label("Delete", systemImage: "trash")
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(store.selectedSavedLayout == nil || store.isExecuting)
-                }
+                    HStack(spacing: 8) {
+                        Button(action: store.saveCurrentLayout) {
+                            Label("Save", systemImage: "square.and.arrow.down")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(!store.canSaveLayout)
 
-                SavedLayoutPreview(layout: store.selectedSavedLayout)
+                        Button(role: .destructive, action: store.deleteSelectedLayout) {
+                            Label("Delete", systemImage: "trash")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(store.selectedSavedLayout == nil || store.isExecuting)
+                    }
+                }
+                .frame(width: 246, alignment: .top)
             }
         }
     }
@@ -143,48 +225,75 @@ private struct SavedLayoutPreview: View {
 
     var body: some View {
         if let layout {
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
                     Label(layout.layoutKind.title, systemImage: layout.layoutKind.symbolName)
-                        .font(.caption.weight(.medium))
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
 
                     Spacer()
 
-                    Text("\(layout.slots.count) window(s)")
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(.tertiary)
+                    MetricBadge(text: "\(layout.slots.count) windows")
                 }
 
-                ForEach(layout.slots.sorted { $0.position < $1.position }) { slot in
-                    HStack(spacing: 8) {
-                        Text(layout.layoutKind.slotTitle(for: slot.position))
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 78, alignment: .leading)
-
-                        Text(slot.appName)
-                            .font(.caption)
-                            .lineLimit(1)
-
-                        if !slot.windowTitle.isEmpty {
-                            Text(slot.windowTitle)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(layout.slots.sorted { $0.position < $1.position }) { slot in
+                        SavedSlotPreviewRow(layout: layout, slot: slot)
                     }
                 }
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.secondary.opacity(0.09), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .stroke(Color.secondary.opacity(0.10), lineWidth: 1)
+            )
         } else {
-            Text("Choose a layout type, select the windows, name it, then save it. Opening a saved layout launches those apps and restores the saved arrangement.")
+            Text("Name a layout, choose the windows below, then save it. Open & Arrange restores the matching apps and window positions.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .padding(.vertical, 4)
         }
+    }
+}
+
+private struct SavedSlotPreviewRow: View {
+    let layout: SavedLayout
+    let slot: SavedLayoutSlot
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(layout.layoutKind.slotTitle(for: slot.position))
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 76, alignment: .leading)
+
+            Text(slot.appName)
+                .font(.caption.weight(.medium))
+                .lineLimit(1)
+
+            if !slot.windowTitle.isEmpty {
+                Text(slot.windowTitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+    }
+}
+
+private struct MetricBadge: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(Color.secondary.opacity(0.10), in: Capsule())
     }
 }
 
@@ -194,17 +303,26 @@ private struct TargetSection: View {
     var body: some View {
         Panel(title: "Target", symbolName: "app.dashed") {
             VStack(alignment: .leading, spacing: 8) {
-                Picker("Application", selection: $store.selectedAppName) {
-                    if store.runningApps.isEmpty {
-                        Text("No running apps found").tag("")
-                    }
+                HStack(spacing: 10) {
+                    Picker("Application", selection: $store.selectedAppName) {
+                        if store.runningApps.isEmpty {
+                            Text("No running apps found").tag("")
+                        }
 
-                    ForEach(store.runningApps) { app in
-                        Text(app.name).tag(app.name)
+                        ForEach(store.runningApps) { app in
+                            Text(app.name).tag(app.name)
+                        }
                     }
+                    .labelsHidden()
+                    .frame(maxWidth: .infinity)
+                    .disabled(store.isExecuting || store.isPickingWindow)
+
+                    Button(action: store.pickWindowAndResize) {
+                        Label(store.isPickingWindow ? "Picking" : "Pick Window", systemImage: "scope")
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(store.isExecuting || store.isPickingWindow)
                 }
-                .labelsHidden()
-                .frame(maxWidth: .infinity)
 
                 if let selectedApp = store.runningApps.first(where: { $0.name == store.selectedAppName }) {
                     Label(selectedApp.bundleIdentifier ?? "Running application", systemImage: "checkmark.circle")
@@ -222,8 +340,8 @@ private struct LayoutBuilderSection: View {
 
     var body: some View {
         Panel(title: "Layout Builder", symbolName: store.selectedLayoutKind.symbolName) {
-            VStack(alignment: .leading, spacing: 9) {
-                HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .center, spacing: 12) {
                     Picker("Layout Type", selection: $store.selectedLayoutKind) {
                         ForEach(LayoutKind.allCases) { kind in
                             Text(kind.title).tag(kind)
@@ -231,22 +349,17 @@ private struct LayoutBuilderSection: View {
                     }
                     .pickerStyle(.menu)
                     .labelsHidden()
+                    .frame(width: 172)
                     .disabled(store.isExecuting)
 
-                    Spacer()
-
-                    Text("\(store.layoutSlotCount) window(s)")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                }
-
-                HStack(spacing: 10) {
                     Label(store.selectedLayoutKind.detail, systemImage: store.selectedLayoutKind.symbolName)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
 
-                    Spacer()
+                    Spacer(minLength: 8)
+
+                    MetricBadge(text: "\(store.layoutSlotCount) windows")
                 }
 
                 if store.selectedLayoutKind == .customPositions {
@@ -255,27 +368,18 @@ private struct LayoutBuilderSection: View {
                         .disabled(store.isExecuting)
                 }
 
-                ForEach(0..<store.layoutSlotCount, id: \.self) { index in
-                    HStack(spacing: 10) {
-                        Text(store.splitSlotTitle(for: index))
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 78, alignment: .leading)
-
-                        Picker(store.splitSlotTitle(for: index), selection: splitSelectionBinding(for: index)) {
-                            Text("Choose window").tag("")
-
-                            ForEach(store.availableWindows) { window in
-                                Text(window.displayName).tag(window.id)
-                            }
-                        }
-                        .labelsHidden()
-                        .frame(maxWidth: .infinity)
-                        .disabled(store.isExecuting || store.availableWindows.isEmpty)
+                VStack(spacing: 6) {
+                    ForEach(0..<store.layoutSlotCount, id: \.self) { index in
+                        SlotPickerRow(
+                            title: store.splitSlotTitle(for: index),
+                            selection: splitSelectionBinding(for: index),
+                            windows: store.availableWindows,
+                            isDisabled: store.isExecuting || store.availableWindows.isEmpty
+                        )
                     }
                 }
 
-                HStack(spacing: 10) {
+                HStack(alignment: .center, spacing: 10) {
                     Label(store.splitPickerStatusText, systemImage: "rectangle.split.3x1")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -286,7 +390,7 @@ private struct LayoutBuilderSection: View {
                     Button(action: store.executeThreeWaySplit) {
                         Label("Arrange Selected", systemImage: store.selectedLayoutKind.symbolName)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.borderedProminent)
                     .disabled(!store.canSplitSelectedWindows)
                 }
             }
@@ -302,6 +406,36 @@ private struct LayoutBuilderSection: View {
                 store.setSplitWindowSelection(selectedID, at: index)
             }
         )
+    }
+}
+
+private struct SlotPickerRow: View {
+    let title: String
+    let selection: Binding<String>
+    let windows: [WindowItem]
+    let isDisabled: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 84, alignment: .leading)
+
+            Picker(title, selection: selection) {
+                Text("Choose window").tag("")
+
+                ForEach(windows) { window in
+                    Text(window.displayName).tag(window.id)
+                }
+            }
+            .labelsHidden()
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .disabled(isDisabled)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
     }
 }
 

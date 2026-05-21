@@ -7,6 +7,11 @@ final class WindowArrangerStore {
     var runningApps: [AppItem] = []
     var availableWindows: [WindowItem] = []
     var hasAccessibilityAccess: Bool
+    var workflowMode: WindowWorkflowMode = .arrange {
+        didSet {
+            UserDefaults.standard.set(workflowMode.rawValue, forKey: workflowModeDefaultsKey)
+        }
+    }
     var selectedAppName = ""
     var selectedSplitWindowIDs = Array(repeating: "", count: 3)
     var selectedPreset: ResizePreset = .hd
@@ -14,6 +19,7 @@ final class WindowArrangerStore {
     var customHeight = "720"
     var resizeAllWindows = false
     var isExecuting = false
+    var isPickingWindow = false
     var executionResult = ""
     var resultKind: ResizeStatusKind = .neutral
     var savedLayouts: [SavedLayout] = []
@@ -24,11 +30,19 @@ final class WindowArrangerStore {
 
     let customLayoutWindowRange = 1...8
 
+    private let workflowModeDefaultsKey = "selectedWorkflowMode.v1"
     private let savedLayoutsDefaultsKey = "savedWindowLayouts.v1"
     private let service = WindowManagementService()
 
     init() {
         hasAccessibilityAccess = service.hasAccessibilityAccess()
+
+        if
+            let rawMode = UserDefaults.standard.string(forKey: workflowModeDefaultsKey),
+            let savedMode = WindowWorkflowMode(rawValue: rawMode)
+        {
+            workflowMode = savedMode
+        }
     }
 
     var targetDimensions: (width: Int, height: Int)? {
@@ -60,7 +74,11 @@ final class WindowArrangerStore {
     }
 
     var canResize: Bool {
-        !selectedAppName.isEmpty && targetDimensions != nil && hasAccessibilityAccess && !isExecuting
+        !selectedAppName.isEmpty
+            && targetDimensions != nil
+            && hasAccessibilityAccess
+            && !isExecuting
+            && !isPickingWindow
     }
 
     var selectedSplitWindows: [WindowItem] {
@@ -291,6 +309,38 @@ final class WindowArrangerStore {
         loadAvailableWindows(preserveSelection: preserveSelection)
     }
 
+    func pickWindowAndResize() {
+        guard !isExecuting, !isPickingWindow else {
+            return
+        }
+
+        guard hasAccessibilityAccess else {
+            resultKind = .error
+            executionResult = "Grant Accessibility access before picking a window."
+            return
+        }
+
+        guard targetDimensions != nil else {
+            resultKind = .error
+            executionResult = "Enter valid dimensions before picking a window."
+            return
+        }
+
+        loadRunningApps(preserveSelection: true)
+        isPickingWindow = true
+        resultKind = .neutral
+        executionResult = "Hover over a window, then click to resize it."
+
+        AppDelegate.shared?.beginWindowResizePick(
+            onPicked: { [weak self] window in
+                self?.executePickedWindowResize(window)
+            },
+            onCancelled: { [weak self] in
+                self?.finishWindowPickCancellation()
+            }
+        )
+    }
+
     func normalizeLayoutSelectionAndRefresh() {
         selectedSplitWindowIDs = normalizedSelectionIDs(selectedSplitWindowIDs)
         loadAvailableWindows(preserveSelection: true)
@@ -444,6 +494,56 @@ final class WindowArrangerStore {
         DispatchQueue.global(qos: .userInitiated).async { [service] in
             let resultMessage = service.executeResize(
                 appName: appName,
+                dimensions: dimensions,
+                resizeAllWindows: shouldResizeAllWindows
+            )
+
+            DispatchQueue.main.async {
+                self.finishWindowAction(with: resultMessage)
+            }
+        }
+    }
+
+    private func finishWindowPickCancellation() {
+        isPickingWindow = false
+        resultKind = .neutral
+        executionResult = "Window pick cancelled."
+        AppDelegate.shared?.bringMainWindowForward()
+    }
+
+    private func executePickedWindowResize(_ window: WindowItem) {
+        guard let dimensions = targetDimensions else {
+            isPickingWindow = false
+            resultKind = .error
+            executionResult = "Enter valid dimensions before resizing."
+            AppDelegate.shared?.bringMainWindowForward()
+            return
+        }
+
+        isPickingWindow = false
+        loadRunningApps(preserveSelection: true)
+
+        if !runningApps.contains(where: { $0.name == window.appName }) {
+            runningApps.append(
+                AppItem(
+                    id: window.bundleIdentifier ?? window.appName,
+                    name: window.appName,
+                    bundleIdentifier: window.bundleIdentifier
+                )
+            )
+            runningApps.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        }
+
+        selectedAppName = window.appName
+
+        let shouldResizeAllWindows = resizeAllWindows
+        isExecuting = true
+        resultKind = .neutral
+        executionResult = "Resizing \(window.displayName)..."
+
+        DispatchQueue.global(qos: .userInitiated).async { [service] in
+            let resultMessage = service.executeResize(
+                window: window,
                 dimensions: dimensions,
                 resizeAllWindows: shouldResizeAllWindows
             )

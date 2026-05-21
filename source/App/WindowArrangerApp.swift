@@ -9,7 +9,6 @@ struct WindowArrangerApp: App {
         WindowGroup {
             ContentView()
         }
-        .windowResizability(.contentSize)
         .commands {
             CommandGroup(replacing: .newItem) {}
 
