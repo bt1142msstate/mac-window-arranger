@@ -1,6 +1,6 @@
 # Mac Window Arranger
 
-Mac Window Arranger is a small macOS SwiftUI utility for resizing and arranging windows from other apps. It can resize the front window or all standard windows for a selected app, arrange selected windows into common layouts, and save layouts that reopen apps and restore their window positions.
+Mac Window Arranger is a small native macOS SwiftUI utility for resizing and arranging windows from other apps. It starts as a compact Dock-adjacent Mini Mode control, expands into the full arranger when needed, and returns to Mini Mode after successful window actions.
 
 <p align="center">
   <img src="docs/assets/mac-window-arranger-preview.png" alt="Mac Window Arranger interface preview" width="900">
@@ -11,9 +11,19 @@ Mac Window Arranger is a small macOS SwiftUI utility for resizing and arranging 
 - Resize the frontmost window or every standard window for a selected app.
 - Use presets for common sizes like 1080p, 720p, mobile, tablet, and square.
 - Arrange selected windows into two-column, three-column, four-grid, and focus-stack layouts.
-- Save custom layouts and reopen the matching apps later.
+- Save custom layouts and reopen the matching apps later with Open & Arrange.
+- Restore minimized saved-layout windows before arranging them.
 - Start in Mini Mode, keep the arranger above other windows, and return to a small Dock-adjacent control after successful actions.
 - Preserve local Accessibility permission across rebuilds with stable signing metadata.
+
+## Current Status
+
+- Built as a local signed, hardened-runtime universal macOS app (`arm64` and `x86_64`).
+- Installed by the build script at `/Applications/Window Arranger.app`.
+- Privacy manifest is bundled at `Contents/Resources/PrivacyInfo.xcprivacy`.
+- App Sandbox is intentionally disabled because sandboxed builds cannot access other apps' windows through Accessibility. The practical public release path is Developer ID signing plus notarization, not Mac App Store submission.
+
+See [docs/STORE_SUBMISSION.md](docs/STORE_SUBMISSION.md) for distribution details and remaining release work.
 
 ## Source Layout
 
@@ -31,6 +41,8 @@ The app follows a small native macOS SwiftUI structure:
 - Xcode command line tools
 - Accessibility permission for Window Arranger
 
+On first use, grant Accessibility permission in System Settings so the app can read, move, unminimize, and resize windows owned by other apps.
+
 ## App Icon
 
 <p>
@@ -43,7 +55,7 @@ The app follows a small native macOS SwiftUI structure:
 ./script/build_and_run.sh
 ```
 
-The build script compiles the Swift sources, generates the app icon, signs the app with a local signing identity, installs it at `/Applications/Window Arranger.app`, and opens it.
+The build script compiles the Swift sources, generates the app icon, signs the app with a stable local signing identity, installs it at `/Applications/Window Arranger.app`, and opens it in Mini Mode.
 
 Use `--verify` to build, install, launch, and confirm the app starts:
 
@@ -51,11 +63,21 @@ Use `--verify` to build, install, launch, and confirm the app starts:
 ./script/build_and_run.sh --verify
 ```
 
+Useful modes:
+
+- `./script/build_and_run.sh --install`: build, install, and launch the app.
+- `./script/build_and_run.sh --logs`: launch and stream process logs.
+- `./script/build_and_run.sh --telemetry`: launch and stream app-subsystem logs.
+
+## Privacy
+
+Mac Window Arranger does not collect analytics, tracking data, or network data. It reads the local list of running apps and window titles so you can select windows to arrange. Saved layouts stay on this Mac in app preferences. See [docs/PRIVACY.md](docs/PRIVACY.md).
+
 ## Signing
 
 The script keeps the bundle identifier, install path, and local signing requirement stable so macOS Accessibility permission survives local rebuilds. The local signing keychain is stored under `~/Library/Application Support/Window Arranger/CodeSigning` instead of this repository.
 
-For distribution details, see [docs/STORE_SUBMISSION.md](docs/STORE_SUBMISSION.md). The current working release path is Developer ID signing plus notarization; Mac App Store submission is blocked until the App Sandbox limitation around Accessibility window control is resolved.
+For public distribution, replace the local signing identity with an Apple Developer ID Application certificate and notarize the app.
 
 ## Open Source
 
