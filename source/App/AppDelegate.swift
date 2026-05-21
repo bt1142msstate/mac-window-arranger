@@ -1,10 +1,13 @@
 import AppKit
+import QuartzCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     static weak var shared: AppDelegate?
 
     private let compactPanelController = CompactPanelController()
+    private let transitionDuration: TimeInterval = 0.24
     private weak var mainWindow: NSWindow?
+    private var lastExpandedMainWindowFrame: NSRect?
 
     override init() {
         super.init()
@@ -38,15 +41,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func restoreMainWindow() {
-        compactPanelController.hide()
-
         guard let window = configureMainWindowIfNeeded(centerIfNeeded: false) else {
             return
         }
 
+        let miniFrame = compactPanelController.currentFrame ?? compactPanelController.frame(on: window.screen)
+        let expandedFrame = lastExpandedMainWindowFrame ?? window.frame
+
+        window.setFrame(miniFrame, display: true)
+        compactPanelController.hide()
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
+
+        animate(window: window, to: expandedFrame)
     }
 
     private func showLaunchMiniMode(attempt: Int = 0) {
@@ -54,7 +62,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let didShow = self.showCompactStatusIfPossible(
                 message: "Ready to arrange windows.",
                 kind: .neutral,
-                centerMainWindowIfNeeded: true
+                centerMainWindowIfNeeded: true,
+                animated: false
             )
 
             guard !didShow, attempt < 20 else {
@@ -69,24 +78,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showCompactStatusIfPossible(
         message: String,
         kind: ResizeStatusKind,
-        centerMainWindowIfNeeded: Bool = false
+        centerMainWindowIfNeeded: Bool = false,
+        animated: Bool = true
     ) -> Bool {
         guard let window = configureMainWindowIfNeeded(centerIfNeeded: centerMainWindowIfNeeded) else {
             return false
         }
 
-        window.orderOut(nil)
-        compactPanelController.show(
-            message: message,
-            kind: kind,
-            on: window.screen,
-            expandAction: { [weak self] in
-                self?.restoreMainWindow()
-            },
-            quitAction: {
-                NSApp.terminate(nil)
-            }
-        )
+        let targetFrame = compactPanelController.frame(on: window.screen)
+        let sourceFrame = window.frame
+
+        if sourceFrame.width > targetFrame.width || sourceFrame.height > targetFrame.height {
+            lastExpandedMainWindowFrame = sourceFrame
+        }
+
+        let showMiniMode = {
+            window.orderOut(nil)
+            self.compactPanelController.show(
+                message: message,
+                kind: kind,
+                on: window.screen,
+                expandAction: { [weak self] in
+                    self?.restoreMainWindow()
+                },
+                quitAction: {
+                    NSApp.terminate(nil)
+                }
+            )
+        }
+
+        guard animated, window.isVisible else {
+            showMiniMode()
+            return true
+        }
+
+        animate(window: window, to: targetFrame) {
+            showMiniMode()
+        }
         return true
     }
 
@@ -142,6 +170,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         frame.origin.y = max(frame.origin.y, visibleFrame.minY + margin)
 
         window.setFrame(frame, display: true)
+        lastExpandedMainWindowFrame = frame
+    }
+
+    private func animate(window: NSWindow, to frame: NSRect, completion: (() -> Void)? = nil) {
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = transitionDuration
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            window.animator().setFrame(frame, display: true)
+        } completionHandler: {
+            window.setFrame(frame, display: true)
+            completion?()
+        }
     }
 
     private func clamped(_ value: CGFloat, lower: CGFloat, upper: CGFloat) -> CGFloat {

@@ -15,6 +15,10 @@ final class CompactPanelController {
     private let panelSize = CGSize(width: 430, height: 68)
     private var panel: CompactArrangerPanel?
 
+    var currentFrame: NSRect? {
+        panel?.frame
+    }
+
     func owns(_ window: NSWindow) -> Bool {
         panel === window
     }
@@ -39,7 +43,7 @@ final class CompactPanelController {
             .frame(width: panelSize.width, height: panelSize.height)
         )
         panel.setContentSize(panelSize)
-        position(panel, on: preferredScreen)
+        panel.setFrame(frame(on: preferredScreen), display: true)
         panel.orderFrontRegardless()
     }
 
@@ -70,9 +74,9 @@ final class CompactPanelController {
         return panel
     }
 
-    private func position(_ panel: NSPanel, on preferredScreen: NSScreen?) {
-        guard let screen = preferredScreen ?? panel.screen ?? NSScreen.main ?? NSScreen.screens.first else {
-            return
+    func frame(on preferredScreen: NSScreen?) -> NSRect {
+        guard let screen = preferredScreen ?? panel?.screen ?? NSScreen.main ?? NSScreen.screens.first else {
+            return NSRect(origin: .zero, size: panelSize)
         }
 
         let visibleFrame = screen.visibleFrame
@@ -83,7 +87,7 @@ final class CompactPanelController {
         )
         let y = visibleFrame.minY + 12
 
-        panel.setFrame(NSRect(origin: CGPoint(x: x, y: y), size: panelSize), display: true)
+        return NSRect(origin: CGPoint(x: x, y: y), size: panelSize)
     }
 
     private func compactMessage(from message: String) -> String {

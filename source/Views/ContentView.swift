@@ -5,12 +5,13 @@ struct ContentView: View {
     @State private var store = WindowArrangerStore()
 
     private let appRefreshTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
+    private let contentSize = CGSize(width: 900, height: 590)
 
     var body: some View {
         @Bindable var store = store
 
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 14) {
                 HeaderView()
 
                 if !store.hasAccessibilityAccess {
@@ -20,16 +21,25 @@ struct ContentView: View {
                     )
                 }
 
-                SavedLayoutsSection(store: store)
-                TargetSection(store: store)
-                LayoutBuilderSection(store: store)
-                ResizeSection(store: store)
-                OptionsSection(store: store)
-                PrimaryActionSection(store: store)
+                HStack(alignment: .top, spacing: 14) {
+                    VStack(spacing: 14) {
+                        SavedLayoutsSection(store: store)
+                        LayoutBuilderSection(store: store)
+                    }
+                    .frame(width: 520, alignment: .top)
+
+                    VStack(spacing: 14) {
+                        TargetSection(store: store)
+                        ResizeSection(store: store)
+                        OptionsSection(store: store)
+                        PrimaryActionSection(store: store)
+                    }
+                    .frame(width: 330, alignment: .top)
+                }
             }
-            .padding(22)
+            .padding(18)
         }
-        .frame(width: 560, height: 760)
+        .frame(width: contentSize.width, height: contentSize.height)
         .background(WindowBackground())
         .tint(.blue)
         .toolbar {
@@ -77,19 +87,26 @@ private struct SavedLayoutsSection: View {
 
     var body: some View {
         Panel(title: "Saved Layouts", symbolName: "rectangle.stack") {
-            VStack(alignment: .leading, spacing: 11) {
-                Picker("Saved Layout", selection: $store.selectedLayoutID) {
-                    if store.savedLayouts.isEmpty {
-                        Text("No saved layouts").tag("")
-                    } else {
-                        ForEach(store.savedLayouts) { layout in
-                            Text(layout.name).tag(layout.id.uuidString)
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(spacing: 10) {
+                    Picker("Saved Layout", selection: $store.selectedLayoutID) {
+                        if store.savedLayouts.isEmpty {
+                            Text("No saved layouts").tag("")
+                        } else {
+                            ForEach(store.savedLayouts) { layout in
+                                Text(layout.name).tag(layout.id.uuidString)
+                            }
                         }
                     }
+                    .labelsHidden()
+                    .frame(maxWidth: .infinity)
+                    .disabled(store.isExecuting || store.savedLayouts.isEmpty)
+
+                    Text("\(store.savedLayouts.count) saved")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .frame(minWidth: 54, alignment: .trailing)
                 }
-                .labelsHidden()
-                .frame(maxWidth: .infinity)
-                .disabled(store.isExecuting || store.savedLayouts.isEmpty)
 
                 HStack(spacing: 10) {
                     TextField("Layout name", text: $store.layoutName)
@@ -97,13 +114,11 @@ private struct SavedLayoutsSection: View {
                         .disabled(store.isExecuting)
 
                     Button(action: store.saveCurrentLayout) {
-                        Label("Save Layout", systemImage: "square.and.arrow.down")
+                        Label("Save", systemImage: "square.and.arrow.down")
                     }
                     .buttonStyle(.bordered)
                     .disabled(!store.canSaveLayout)
-                }
 
-                HStack(spacing: 10) {
                     Button(action: store.applySelectedLayout) {
                         Label("Open & Arrange", systemImage: "play.rectangle")
                     }
@@ -115,12 +130,6 @@ private struct SavedLayoutsSection: View {
                     }
                     .buttonStyle(.bordered)
                     .disabled(store.selectedSavedLayout == nil || store.isExecuting)
-
-                    Spacer()
-
-                    Text("\(store.savedLayouts.count) saved")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
                 }
 
                 SavedLayoutPreview(layout: store.selectedSavedLayout)
@@ -134,10 +143,18 @@ private struct SavedLayoutPreview: View {
 
     var body: some View {
         if let layout {
-            VStack(alignment: .leading, spacing: 6) {
-                Label("\(layout.layoutKind.title) - \(layout.slots.count) window(s)", systemImage: layout.layoutKind.symbolName)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 8) {
+                    Label(layout.layoutKind.title, systemImage: layout.layoutKind.symbolName)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+
+                    Spacer()
+
+                    Text("\(layout.slots.count) window(s)")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.tertiary)
+                }
 
                 ForEach(layout.slots.sorted { $0.position < $1.position }) { slot in
                     HStack(spacing: 8) {
@@ -176,23 +193,25 @@ private struct TargetSection: View {
 
     var body: some View {
         Panel(title: "Target", symbolName: "app.dashed") {
-            Picker("Application", selection: $store.selectedAppName) {
-                if store.runningApps.isEmpty {
-                    Text("No running apps found").tag("")
-                }
+            VStack(alignment: .leading, spacing: 8) {
+                Picker("Application", selection: $store.selectedAppName) {
+                    if store.runningApps.isEmpty {
+                        Text("No running apps found").tag("")
+                    }
 
-                ForEach(store.runningApps) { app in
-                    Text(app.name).tag(app.name)
+                    ForEach(store.runningApps) { app in
+                        Text(app.name).tag(app.name)
+                    }
                 }
-            }
-            .labelsHidden()
-            .frame(maxWidth: .infinity)
+                .labelsHidden()
+                .frame(maxWidth: .infinity)
 
-            if let selectedApp = store.runningApps.first(where: { $0.name == store.selectedAppName }) {
-                Label(selectedApp.bundleIdentifier ?? "Running application", systemImage: "checkmark.circle")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                if let selectedApp = store.runningApps.first(where: { $0.name == store.selectedAppName }) {
+                    Label(selectedApp.bundleIdentifier ?? "Running application", systemImage: "checkmark.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
         }
     }
@@ -203,15 +222,23 @@ private struct LayoutBuilderSection: View {
 
     var body: some View {
         Panel(title: "Layout Builder", symbolName: store.selectedLayoutKind.symbolName) {
-            VStack(alignment: .leading, spacing: 10) {
-                Picker("Layout Type", selection: $store.selectedLayoutKind) {
-                    ForEach(LayoutKind.allCases) { kind in
-                        Text(kind.title).tag(kind)
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(spacing: 10) {
+                    Picker("Layout Type", selection: $store.selectedLayoutKind) {
+                        ForEach(LayoutKind.allCases) { kind in
+                            Text(kind.title).tag(kind)
+                        }
                     }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .disabled(store.isExecuting)
+
+                    Spacer()
+
+                    Text("\(store.layoutSlotCount) window(s)")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
                 }
-                .pickerStyle(.menu)
-                .labelsHidden()
-                .disabled(store.isExecuting)
 
                 HStack(spacing: 10) {
                     Label(store.selectedLayoutKind.detail, systemImage: store.selectedLayoutKind.symbolName)
@@ -220,10 +247,6 @@ private struct LayoutBuilderSection: View {
                         .lineLimit(2)
 
                     Spacer()
-
-                    Text("\(store.layoutSlotCount) window(s)")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
                 }
 
                 if store.selectedLayoutKind == .customPositions {
@@ -287,45 +310,47 @@ private struct ResizeSection: View {
 
     var body: some View {
         Panel(title: "Size", symbolName: "aspectratio") {
-            Picker("Preset", selection: $store.selectedPreset) {
-                ForEach(ResizePreset.allCases) { preset in
-                    Text(preset.title).tag(preset)
+            VStack(alignment: .leading, spacing: 9) {
+                Picker("Preset", selection: $store.selectedPreset) {
+                    ForEach(ResizePreset.allCases) { preset in
+                        Text(preset.title).tag(preset)
+                    }
                 }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .disabled(store.isExecuting)
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .disabled(store.isExecuting)
 
-            HStack(spacing: 10) {
-                Label(store.selectedPreset.detail, systemImage: store.selectedPreset.symbolName)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-
-                Spacer()
-
-                Text(store.dimensionsLabel)
-                    .font(.system(.callout, design: .monospaced).weight(.semibold))
-                    .foregroundStyle(store.targetDimensions == nil ? .red : .primary)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 5)
-                    .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-            }
-
-            if store.selectedPreset == .custom {
                 HStack(spacing: 10) {
-                    DimensionField(title: "Width", text: $store.customWidth)
-                    Image(systemName: "xmark")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.secondary)
-                    DimensionField(title: "Height", text: $store.customHeight)
-                }
-                .transition(.opacity.combined(with: .move(edge: .top)))
-
-                if store.targetDimensions == nil {
-                    Text("Enter whole-pixel dimensions between 100 and 10000.")
+                    Label(store.selectedPreset.detail, systemImage: store.selectedPreset.symbolName)
                         .font(.caption)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+
+                    Spacer()
+
+                    Text(store.dimensionsLabel)
+                        .font(.system(.callout, design: .monospaced).weight(.semibold))
+                        .foregroundStyle(store.targetDimensions == nil ? .red : .primary)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                }
+
+                if store.selectedPreset == .custom {
+                    HStack(spacing: 10) {
+                        DimensionField(title: "Width", text: $store.customWidth)
+                        Image(systemName: "xmark")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.secondary)
+                        DimensionField(title: "Height", text: $store.customHeight)
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+
+                    if store.targetDimensions == nil {
+                        Text("Enter whole-pixel dimensions between 100 and 10000.")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
                 }
             }
         }
@@ -338,12 +363,7 @@ private struct OptionsSection: View {
     var body: some View {
         Panel(title: "Options", symbolName: "rectangle.3.group") {
             Toggle(isOn: $store.resizeAllWindows) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Resize every standard window")
-                    Text("Leave this off to target only the frontmost window.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                Text("Resize every standard window")
             }
             .toggleStyle(.switch)
             .disabled(store.isExecuting)
@@ -355,42 +375,44 @@ private struct PrimaryActionSection: View {
     let store: WindowArrangerStore
 
     var body: some View {
-        VStack(spacing: 12) {
-            Button(action: store.executeResize) {
-                HStack(spacing: 8) {
-                    if store.isExecuting {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        Image(systemName: store.resizeAllWindows ? "rectangle.3.group.bubble.left" : "macwindow")
+        Panel(title: "Resize", symbolName: store.resizeAllWindows ? "rectangle.3.group.bubble.left" : "macwindow") {
+            VStack(spacing: 10) {
+                Button(action: store.executeResize) {
+                    HStack(spacing: 8) {
+                        if store.isExecuting {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Image(systemName: store.resizeAllWindows ? "rectangle.3.group.bubble.left" : "macwindow")
+                        }
+
+                        Text(store.isExecuting ? "Resizing..." : "Resize \(store.resizeAllWindows ? "Windows" : "Window")")
+                            .fontWeight(.semibold)
                     }
-
-                    Text(store.isExecuting ? "Resizing..." : "Resize \(store.resizeAllWindows ? "Windows" : "Window")")
-                        .fontWeight(.semibold)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 2)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 2)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .disabled(!store.canResize)
-            .keyboardShortcut(.return, modifiers: .command)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(!store.canResize)
+                .keyboardShortcut(.return, modifiers: .command)
 
-            HStack {
-                Text(store.selectedAppName.isEmpty ? "Choose a running app." : "\(store.selectedAppName) -> \(store.dimensionsLabel)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                HStack {
+                    Text(store.selectedAppName.isEmpty ? "Choose a running app." : "\(store.selectedAppName) -> \(store.dimensionsLabel)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
 
-                Spacer()
+                    Spacer()
 
-                Text(store.resizeAllWindows ? "All windows" : "Front window")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-            }
+                    Text(store.resizeAllWindows ? "All windows" : "Front window")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
 
-            if !store.executionResult.isEmpty {
-                StatusBanner(text: store.executionResult, kind: store.resultKind)
+                if !store.executionResult.isEmpty {
+                    StatusBanner(text: store.executionResult, kind: store.resultKind)
+                }
             }
         }
     }
