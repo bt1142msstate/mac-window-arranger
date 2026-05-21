@@ -1,7 +1,7 @@
 # Distribution Readiness
 
 This project is intended to launch as a low-cost paid Mac App Store app, likely
-around one or two dollars, while keeping the source available for users who want
+around $2 to $4, while keeping the source available for users who want
 to build or customize it themselves. The current build is close to a signed,
 notarized direct-distribution shape, but Mac App Store submission is blocked by
 App Sandbox: sandboxed builds cannot see or arrange other apps' windows through

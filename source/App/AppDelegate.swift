@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     static weak var shared: AppDelegate?
@@ -7,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let windowPickerController = WindowPickerController()
     private let transitionCoordinator = WindowTransitionCoordinator()
     private weak var mainWindow: NSWindow?
+    private var fallbackMainWindow: NSWindow?
     private var lastExpandedMainWindowFrame: NSRect?
 
     override init() {
@@ -202,13 +204,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @discardableResult
     private func configureMainWindowIfNeeded(centerIfNeeded: Bool) -> NSWindow? {
-        let window = mainWindow ?? NSApp.windows.first { window in
-            !compactPanelController.owns(window) && !(window is NSPanel)
-        }
-
-        guard let window else {
-            return nil
-        }
+        let window = mainWindow
+            ?? NSApp.windows.first { window in
+                !compactPanelController.owns(window) && !(window is NSPanel)
+            }
+            ?? fallbackMainWindow
+            ?? makeFallbackMainWindow()
 
         let isNewMainWindow = mainWindow !== window
         mainWindow = window
@@ -218,6 +219,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             positionMainWindowAboveDock(window)
         }
 
+        return window
+    }
+
+    private func makeFallbackMainWindow() -> NSWindow {
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: WindowWorkflowMode.arrange.contentSize),
+            styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+
+        window.contentView = NSHostingView(rootView: ContentView())
+        window.isReleasedWhenClosed = false
+        fallbackMainWindow = window
         return window
     }
 
