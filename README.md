@@ -3,7 +3,11 @@
 Mac Window Arranger is a small native macOS SwiftUI utility for resizing and arranging windows from other apps. It starts as a compact Dock-adjacent Mini Mode control, expands into the full arranger when needed, and returns to Mini Mode after successful window actions.
 
 <p align="center">
-  <img src="docs/assets/mac-window-arranger-preview.png" alt="Mac Window Arranger interface preview" width="900">
+  <img src="docs/assets/mac-window-arranger-mini.png" alt="Mac Window Arranger Mini Mode screenshot" width="520">
+</p>
+
+<p align="center">
+  <img src="docs/assets/mac-window-arranger-preview.png" alt="Mac Window Arranger full app screenshot" width="520">
 </p>
 
 ## Features
