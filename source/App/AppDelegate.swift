@@ -7,9 +7,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let compactPanelController = CompactPanelController()
     private let windowPickerController = WindowPickerController()
     private let transitionCoordinator = WindowTransitionCoordinator()
+    private let compactLayoutService = WindowManagementService()
     private weak var mainWindow: NSWindow?
     private var fallbackMainWindow: NSWindow?
     private var lastExpandedMainWindowFrame: NSRect?
+    private var isApplyingCompactLayout = false
 
     override init() {
         super.init()
@@ -172,10 +174,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let showMiniMode = {
             window.orderOut(nil)
+            let layoutState = self.compactLayoutState()
             self.compactPanelController.show(
                 message: message,
                 kind: kind,
+                layoutTitle: layoutState.title,
+                layoutOptions: layoutState.options,
                 on: window.screen,
+                selectLayoutAction: { [weak self] layoutID in
+                    self?.applyCompactLayout(id: layoutID)
+                },
                 expandAction: { [weak self] in
                     self?.restoreMainWindow()
                 },
@@ -200,6 +208,74 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             revealDestination: showMiniMode
         )
         return true
+    }
+
+    private func compactLayoutState() -> (title: String?, options: [CompactLayoutOption]) {
+        let layouts = LayoutPersistence.loadSavedLayouts()
+        let selectedLayoutID = LayoutPersistence.selectedLayoutID
+        let selectedLayout = layouts.first { $0.id.uuidString == selectedLayoutID }
+        let title = selectedLayout?.name ?? (layouts.isEmpty ? nil : "Unsaved Layout")
+
+        let options = layouts.map { layout in
+            CompactLayoutOption(
+                id: layout.id.uuidString,
+                name: layout.name,
+                detail: "\(layout.layoutKind.title) - \(layout.slots.count) windows",
+                isSelected: layout.id.uuidString == selectedLayoutID
+            )
+        }
+
+        return (title, options)
+    }
+
+    private func applyCompactLayout(id layoutID: String) {
+        guard !isApplyingCompactLayout else {
+            return
+        }
+
+        let layouts = LayoutPersistence.loadSavedLayouts()
+
+        guard let layout = layouts.first(where: { $0.id.uuidString == layoutID }) else {
+            LayoutPersistence.selectedLayoutID = ""
+            showCompactStatus(message: "Saved layout could not be found.", kind: .error)
+            return
+        }
+
+        let frames = compactLayoutService.frames(for: layout)
+
+        guard frames.count == layout.slots.count else {
+            showCompactStatus(message: "Could not read the saved layout frames.", kind: .error)
+            return
+        }
+
+        isApplyingCompactLayout = true
+        LayoutPersistence.selectedLayoutID = layout.id.uuidString
+        let layoutState = compactLayoutState()
+        compactPanelController.show(
+            message: "Opening and arranging \(layout.name)...",
+            kind: .neutral,
+            layoutTitle: layoutState.title,
+            layoutOptions: layoutState.options,
+            on: compactPanelController.currentWindow?.screen,
+            selectLayoutAction: { [weak self] layoutID in
+                self?.applyCompactLayout(id: layoutID)
+            },
+            expandAction: { [weak self] in
+                self?.restoreMainWindow()
+            },
+            quitAction: {
+                NSApp.terminate(nil)
+            }
+        )
+
+        DispatchQueue.global(qos: .userInitiated).async { [compactLayoutService] in
+            let resultMessage = compactLayoutService.openAndArrange(layout: layout, frames: frames)
+
+            DispatchQueue.main.async {
+                self.isApplyingCompactLayout = false
+                self.showCompactStatus(message: resultMessage, kind: self.statusKind(for: resultMessage))
+            }
+        }
     }
 
     @discardableResult
@@ -296,5 +372,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return min(max(value, lower), upper)
+    }
+
+    private func statusKind(for message: String) -> ResizeStatusKind {
+        let lowercased = message.lowercased()
+
+        if lowercased.contains("failed") || lowercased.contains("error") || lowercased.contains("script error") {
+            return .error
+        }
+
+        if lowercased.contains("blocked") || lowercased.contains("constraints") {
+            return .warning
+        }
+
+        return .success
     }
 }

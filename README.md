@@ -23,7 +23,7 @@ Mac Window Arranger is a small native macOS SwiftUI utility for resizing and arr
 - Save custom layouts and reopen the matching apps later with Open & Arrange.
 - Keep Resize and Arrange modes separate so each workflow stays compact.
 - Restore minimized saved-layout windows before arranging them.
-- Start in Mini Mode, keep the arranger above other windows, and return to a small Dock-adjacent control after successful actions.
+- Start in Mini Mode, switch saved layouts from the compact control, and return to a small Dock-adjacent control after successful actions.
 - Preserve local Accessibility permission across rebuilds with stable signing metadata.
 
 ## Current Status

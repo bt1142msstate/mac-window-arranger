@@ -23,7 +23,11 @@ final class WindowArrangerStore {
     var executionResult = ""
     var resultKind: ResizeStatusKind = .neutral
     var savedLayouts: [SavedLayout] = []
-    var selectedLayoutID = ""
+    var selectedLayoutID = "" {
+        didSet {
+            LayoutPersistence.selectedLayoutID = selectedLayoutID
+        }
+    }
     var layoutName = "Work Layout"
     var selectedLayoutKind: LayoutKind = .threeColumns
     var customLayoutWindowCount = 3
@@ -31,11 +35,11 @@ final class WindowArrangerStore {
     let customLayoutWindowRange = 1...8
 
     private let workflowModeDefaultsKey = "selectedWorkflowMode.v1"
-    private let savedLayoutsDefaultsKey = "savedWindowLayouts.v1"
     private let service = WindowManagementService()
 
     init() {
         hasAccessibilityAccess = service.hasAccessibilityAccess()
+        selectedLayoutID = LayoutPersistence.selectedLayoutID
 
         if
             let rawMode = UserDefaults.standard.string(forKey: workflowModeDefaultsKey),
@@ -189,10 +193,11 @@ final class WindowArrangerStore {
     }
 
     func loadSavedLayouts() {
-        guard
-            let data = UserDefaults.standard.data(forKey: savedLayoutsDefaultsKey),
-            let decodedLayouts = try? JSONDecoder().decode([SavedLayout].self, from: data)
-        else {
+        let decodedLayouts = LayoutPersistence.loadSavedLayouts()
+
+        guard !decodedLayouts.isEmpty else {
+            savedLayouts = []
+            selectedLayoutID = ""
             if selectedLayoutID.isEmpty {
                 layoutName = "Work Layout"
             }
@@ -201,8 +206,8 @@ final class WindowArrangerStore {
 
         savedLayouts = decodedLayouts
 
-        if selectedLayoutID.isEmpty {
-            selectedLayoutID = decodedLayouts.first?.id.uuidString ?? ""
+        if !selectedLayoutID.isEmpty, !decodedLayouts.contains(where: { $0.id.uuidString == selectedLayoutID }) {
+            selectedLayoutID = ""
         }
 
         syncSelectedLayoutMetadata()
@@ -293,8 +298,8 @@ final class WindowArrangerStore {
         }
 
         savedLayouts.removeAll { $0.id == selectedSavedLayout.id }
-        selectedLayoutID = savedLayouts.first?.id.uuidString ?? ""
-        layoutName = savedLayouts.first?.name ?? "Work Layout"
+        selectedLayoutID = ""
+        layoutName = "Work Layout"
         persistSavedLayouts()
         resultKind = .success
         executionResult = "Deleted layout \"\(selectedSavedLayout.name)\"."
@@ -547,6 +552,9 @@ final class WindowArrangerStore {
             )
 
             DispatchQueue.main.async {
+                if self.statusKind(for: resultMessage) != .error {
+                    self.selectedLayoutID = ""
+                }
                 self.finishWindowAction(with: resultMessage)
                 self.loadAvailableWindows(preserveSelection: true)
             }
@@ -575,6 +583,9 @@ final class WindowArrangerStore {
             )
 
             DispatchQueue.main.async {
+                if self.statusKind(for: resultMessage) != .error {
+                    self.selectedLayoutID = ""
+                }
                 self.finishWindowAction(with: resultMessage)
             }
         }
@@ -625,6 +636,9 @@ final class WindowArrangerStore {
             )
 
             DispatchQueue.main.async {
+                if self.statusKind(for: resultMessage) != .error {
+                    self.selectedLayoutID = ""
+                }
                 self.finishWindowAction(with: resultMessage)
             }
         }
@@ -645,11 +659,7 @@ final class WindowArrangerStore {
     }
 
     private func persistSavedLayouts() {
-        guard let data = try? JSONEncoder().encode(savedLayouts) else {
-            return
-        }
-
-        UserDefaults.standard.set(data, forKey: savedLayoutsDefaultsKey)
+        LayoutPersistence.saveLayouts(savedLayouts)
     }
 
     private func nextLayoutDraftName() -> String {

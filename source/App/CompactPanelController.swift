@@ -30,7 +30,10 @@ final class CompactPanelController {
     func show(
         message: String,
         kind: ResizeStatusKind,
+        layoutTitle: String?,
+        layoutOptions: [CompactLayoutOption],
         on preferredScreen: NSScreen?,
+        selectLayoutAction: @escaping (String) -> Void,
         expandAction: @escaping () -> Void,
         quitAction: @escaping () -> Void
     ) {
@@ -42,6 +45,9 @@ final class CompactPanelController {
             rootView: CompactArrangerPanelView(
                 message: compactMessage(from: message),
                 kind: kind,
+                layoutTitle: layoutTitle,
+                layoutOptions: layoutOptions,
+                selectLayoutAction: selectLayoutAction,
                 expandAction: expandAction,
                 quitAction: quitAction
             )
