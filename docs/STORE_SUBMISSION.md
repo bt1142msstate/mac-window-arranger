@@ -1,10 +1,11 @@
 # Distribution Readiness
 
-This project is intended to launch as a free Mac App Store app. The current build
-is close to a signed, notarized direct-distribution shape, but Mac App Store
-submission is blocked by App Sandbox: sandboxed builds cannot see or arrange
-other apps' windows through Accessibility on this Mac, which breaks the app's
-core feature.
+This project is intended to launch as a low-cost paid Mac App Store app, likely
+around one or two dollars, while keeping the source available for users who want
+to build or customize it themselves. The current build is close to a signed,
+notarized direct-distribution shape, but Mac App Store submission is blocked by
+App Sandbox: sandboxed builds cannot see or arrange other apps' windows through
+Accessibility on this Mac, which breaks the app's core feature.
 
 ## Implemented In The App
 
@@ -57,7 +58,7 @@ Apple references:
 - Fill privacy disclosures: no tracking, no analytics, no network collection;
   disclose on-device window/app title access in release notes or reviewer notes.
 - Prepare screenshots, app description, support URL, marketing URL if desired,
-  age rating, category, and free pricing.
+  age rating, category, and low-cost paid pricing.
 
 ## Local Validation
 

@@ -25,7 +25,7 @@ Mac Window Arranger is a small native macOS SwiftUI utility for resizing and arr
 - Built as a local signed, hardened-runtime universal macOS app (`arm64` and `x86_64`).
 - Installed by the build script at `/Applications/Window Arranger.app`.
 - Privacy manifest is bundled at `Contents/Resources/PrivacyInfo.xcprivacy`.
-- Planned public release: free on the Mac App Store.
+- Planned public release: low-cost paid Mac App Store version, likely around one or two dollars, to support continued development.
 - Current App Store blocker: App Sandbox is intentionally disabled because sandboxed builds cannot access other apps' windows through Accessibility. Developer ID signing plus notarization is the fallback path while that blocker is unresolved.
 
 See [docs/STORE_SUBMISSION.md](docs/STORE_SUBMISSION.md) for distribution details and remaining release work.
@@ -86,4 +86,4 @@ For public distribution, replace the local signing identity with an Apple Develo
 
 ## Open Source
 
-Mac Window Arranger is open source under the MIT License. See [LICENSE](LICENSE) for details.
+Mac Window Arranger is open source under the MIT License. See [LICENSE](LICENSE) for details. The Mac App Store version is planned as the easiest supported install path, while this repository remains available for users who want to build it themselves or create a custom version.
