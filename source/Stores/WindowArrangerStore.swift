@@ -103,6 +103,7 @@ final class WindowArrangerStore {
                 slotTitle: splitSlotTitle(for: index),
                 selectedWindowID: selectedID.isEmpty ? nil : selectedID,
                 appName: window?.appName,
+                bundleIdentifier: window?.bundleIdentifier,
                 windowTitle: window?.title,
                 frame: frame
             )

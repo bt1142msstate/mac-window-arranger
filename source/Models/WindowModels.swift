@@ -221,6 +221,7 @@ struct LayoutPreviewPane: Identifiable, Hashable {
     let slotTitle: String
     let selectedWindowID: String?
     let appName: String?
+    let bundleIdentifier: String?
     let windowTitle: String?
     let frame: CGRect
 
@@ -334,6 +335,7 @@ struct SavedLayout: Identifiable, Codable, Hashable {
                 slotTitle: layoutKind.slotTitle(for: slot.position),
                 selectedWindowID: nil,
                 appName: slot.appName,
+                bundleIdentifier: slot.bundleIdentifier,
                 windowTitle: slot.windowTitle,
                 frame: previewFrame
             )

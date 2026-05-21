@@ -388,9 +388,21 @@ private struct LayoutPaneWindowChooser: View {
                                 selectWindow(window.id)
                             } label: {
                                 HStack(spacing: 7) {
-                                    Image(systemName: isCurrentSelection ? "checkmark.circle.fill" : "macwindow")
-                                        .foregroundStyle(isCurrentSelection ? .blue : .secondary)
-                                        .frame(width: 16)
+                                    ZStack(alignment: .bottomTrailing) {
+                                        ApplicationIconImage(
+                                            bundleIdentifier: window.bundleIdentifier,
+                                            appName: window.appName,
+                                            size: 20
+                                        )
+
+                                        if isCurrentSelection {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .font(.system(size: 9, weight: .bold))
+                                                .foregroundStyle(.white, .blue)
+                                                .offset(x: 2, y: 2)
+                                        }
+                                    }
+                                    .frame(width: 22)
 
                                     Text(window.displayName)
                                         .lineLimit(1)
@@ -444,11 +456,21 @@ private struct LayoutMockupPaneView: View {
 
             Spacer(minLength: 0)
 
-            Text(pane.primaryLabel)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.65)
+            HStack(spacing: 5) {
+                if pane.hasWindow {
+                    ApplicationIconImage(
+                        bundleIdentifier: pane.bundleIdentifier,
+                        appName: pane.appName,
+                        size: 14
+                    )
+                }
+
+                Text(pane.primaryLabel)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.65)
+            }
 
             Text(pane.secondaryLabel)
                 .font(.caption2)
@@ -494,7 +516,8 @@ private struct TargetSection: View {
                         }
 
                         ForEach(store.runningApps) { app in
-                            Text(app.name).tag(app.name)
+                            ApplicationPickerRow(app: app)
+                                .tag(app.name)
                         }
                     }
                     .labelsHidden()
@@ -515,6 +538,22 @@ private struct TargetSection: View {
                         .lineLimit(1)
                 }
             }
+        }
+    }
+}
+
+private struct ApplicationPickerRow: View {
+    let app: AppItem
+
+    var body: some View {
+        HStack(spacing: 7) {
+            ApplicationIconImage(
+                bundleIdentifier: app.bundleIdentifier,
+                appName: app.name,
+                size: 18
+            )
+
+            Text(app.name)
         }
     }
 }
