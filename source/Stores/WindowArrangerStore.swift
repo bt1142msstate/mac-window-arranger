@@ -223,6 +223,11 @@ final class WindowArrangerStore {
         }
     }
 
+    func createNewLayoutDraft() {
+        selectedLayoutID = ""
+        layoutName = nextLayoutDraftName()
+    }
+
     func saveCurrentLayout() {
         let windows = selectedSplitWindows
 
@@ -645,6 +650,23 @@ final class WindowArrangerStore {
         }
 
         UserDefaults.standard.set(data, forKey: savedLayoutsDefaultsKey)
+    }
+
+    private func nextLayoutDraftName() -> String {
+        let baseName = "Work Layout"
+
+        if !savedLayouts.contains(where: { $0.name.localizedCaseInsensitiveCompare(baseName) == .orderedSame }) {
+            return baseName
+        }
+
+        var suffix = 2
+        while true {
+            let candidate = "\(baseName) \(suffix)"
+            if !savedLayouts.contains(where: { $0.name.localizedCaseInsensitiveCompare(candidate) == .orderedSame }) {
+                return candidate
+            }
+            suffix += 1
+        }
     }
 
     private func finishWindowAction(with resultMessage: String) {
