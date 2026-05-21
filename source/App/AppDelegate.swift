@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private weak var mainWindow: NSWindow?
     private var lastExpandedMainWindowFrame: NSRect?
     private var frameAnimationTimer: Timer?
+    private var transitionPanel: NSPanel?
 
     override init() {
         super.init()
@@ -36,6 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
 
+            window.alphaValue = 1
             NSApp.activate(ignoringOtherApps: true)
             window.makeKeyAndOrderFront(nil)
             window.orderFrontRegardless()
@@ -93,6 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let expandedFrame = lastExpandedMainWindowFrame ?? window.frame
 
         window.setFrame(miniFrame, display: true)
+        window.alphaValue = 1
         compactPanelController.hide()
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
@@ -156,7 +159,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         }
 
-        animate(window: window, to: targetFrame) {
+        guard let transitionPanel = makeTransitionPanel(for: window, frame: sourceFrame) else {
+            animate(window: window, to: targetFrame) {
+                showMiniMode()
+            }
+            return true
+        }
+
+        window.alphaValue = 0
+        window.orderOut(nil)
+        animate(window: transitionPanel, to: targetFrame) { [weak self, weak transitionPanel] in
+            transitionPanel?.alphaValue = 0
+            transitionPanel?.orderOut(nil)
+            transitionPanel?.close()
+
+            if self?.transitionPanel === transitionPanel {
+                self?.transitionPanel = nil
+            }
+
             showMiniMode()
         }
         return true
@@ -234,6 +254,65 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             width: contentSize.width + chromeWidth,
             height: contentSize.height + chromeHeight
         )
+    }
+
+    private func makeTransitionPanel(for window: NSWindow, frame: NSRect) -> NSPanel? {
+        guard let snapshot = snapshotImage(for: window) else {
+            return nil
+        }
+
+        transitionPanel?.orderOut(nil)
+        transitionPanel?.close()
+
+        let panel = NSPanel(
+            contentRect: frame,
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.title = "Window Arranger Transition"
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.ignoresMouseEvents = true
+        panel.level = .floating
+        panel.animationBehavior = .none
+        panel.collectionBehavior = [
+            .canJoinAllSpaces,
+            .fullScreenAuxiliary,
+            .transient,
+            .ignoresCycle
+        ]
+
+        let imageView = NSImageView(frame: NSRect(origin: .zero, size: frame.size))
+        imageView.image = snapshot
+        imageView.imageScaling = .scaleAxesIndependently
+        imageView.autoresizingMask = [.width, .height]
+        imageView.wantsLayer = true
+        imageView.layer?.cornerRadius = 8
+        imageView.layer?.masksToBounds = true
+        panel.contentView = imageView
+
+        transitionPanel = panel
+        panel.orderFrontRegardless()
+        return panel
+    }
+
+    private func snapshotImage(for window: NSWindow) -> NSImage? {
+        guard
+            let contentView = window.contentView,
+            let snapshotView = contentView.superview ?? window.contentView,
+            let representation = snapshotView.bitmapImageRepForCachingDisplay(in: snapshotView.bounds)
+        else {
+            return nil
+        }
+
+        snapshotView.displayIfNeeded()
+        snapshotView.cacheDisplay(in: snapshotView.bounds, to: representation)
+
+        let image = NSImage(size: snapshotView.bounds.size)
+        image.addRepresentation(representation)
+        return image
     }
 
     private func animate(window: NSWindow, to frame: NSRect, completion: (() -> Void)? = nil) {
