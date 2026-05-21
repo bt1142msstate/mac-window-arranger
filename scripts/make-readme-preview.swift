@@ -2,8 +2,8 @@ import AppKit
 import Foundation
 
 let arguments = CommandLine.arguments.dropFirst()
-let outputPath = arguments.first ?? "docs/assets/mac-window-resizer-preview.png"
-let iconPath = arguments.dropFirst().first ?? "docs/assets/mac-window-resizer-icon.png"
+let outputPath = arguments.first ?? "docs/assets/mac-window-arranger-preview.png"
+let iconPath = arguments.dropFirst().first ?? "docs/assets/mac-window-arranger-icon.png"
 
 let canvasSize = NSSize(width: 1600, height: 1000)
 let image = NSImage(size: canvasSize)
@@ -96,7 +96,7 @@ fillRounded(rectFromTop(x: 118, y: 166, width: 1236, height: 34), radius: 0, col
 fillRounded(rectFromTop(x: 150, y: 148, width: 22, height: 22), radius: 11, color: color(0xff5f57))
 fillRounded(rectFromTop(x: 190, y: 148, width: 22, height: 22), radius: 11, color: color(0xffbd2e))
 fillRounded(rectFromTop(x: 230, y: 148, width: 22, height: 22), radius: 11, color: color(0x28c840))
-drawText("Window Resizer", x: 282, y: 143, width: 420, height: 32, size: 20, weight: .bold, color: color(0xdbe1e8))
+drawText("Window Arranger", x: 282, y: 143, width: 420, height: 32, size: 20, weight: .bold, color: color(0xdbe1e8))
 
 if let icon = NSImage(contentsOfFile: iconPath) {
     icon.draw(in: rectFromTop(x: 178, y: 238, width: 96, height: 96))
@@ -104,7 +104,7 @@ if let icon = NSImage(contentsOfFile: iconPath) {
     fillRounded(rectFromTop(x: 178, y: 238, width: 96, height: 96), radius: 20, color: .white)
 }
 
-drawText("Mac Window Resizer", x: 310, y: 240, width: 520, height: 42, size: 32, weight: .bold, color: color(0xf5f7fa))
+drawText("Mac Window Arranger", x: 310, y: 240, width: 600, height: 42, size: 32, weight: .bold, color: color(0xf5f7fa))
 drawText("Resize windows, build split layouts, and restore saved workspaces.", x: 310, y: 292, width: 720, height: 28, size: 20, weight: .medium, color: color(0xb8c0ca))
 
 drawPanel(title: "Saved Layouts", symbol: "[]", x: 178, y: 370, width: 480, height: 246)

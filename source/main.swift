@@ -3,7 +3,7 @@ import AppKit
 import ApplicationServices
 
 @main
-struct WindowResizerApp: App {
+struct WindowArrangerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
@@ -23,7 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         DispatchQueue.main.async {
             NSApp.windows.forEach { window in
-                window.title = "Window Resizer"
+                window.title = "Window Arranger"
                 window.titlebarAppearsTransparent = true
                 window.standardWindowButton(.zoomButton)?.isHidden = true
                 window.center()
@@ -903,7 +903,7 @@ struct ContentView: View {
         let apps = NSWorkspace.shared.runningApplications
             .filter { $0.activationPolicy == .regular }
             .compactMap { app -> AppItem? in
-                guard let name = app.localizedName, name != "Window Resizer" else {
+                guard let name = app.localizedName, name != "Window Arranger" else {
                     return nil
                 }
 
@@ -1047,7 +1047,7 @@ struct ContentView: View {
                 let app = runningAppsByPID[processIdentifier],
                 app.activationPolicy == .regular,
                 let appName = app.localizedName,
-                appName != "Window Resizer",
+                appName != "Window Arranger",
                 let windowNumber = info[kCGWindowNumber as String] as? CGWindowID,
                 let layer = info[kCGWindowLayer as String] as? Int,
                 layer == 0,
@@ -1949,10 +1949,10 @@ struct HeaderView: View {
             AppIconView()
 
             VStack(alignment: .leading, spacing: 3) {
-                Text("Window Resizer")
+                Text("Window Arranger")
                     .font(.title2.weight(.semibold))
 
-                Text("Resize windows, split three, or open saved layouts.")
+                Text("Resize windows, build layouts, or restore saved workspaces.")
                     .font(.callout)
                     .foregroundColor(.secondary)
             }
@@ -1965,7 +1965,7 @@ struct HeaderView: View {
 struct AppIconView: View {
     var body: some View {
         Group {
-            if let icon = NSImage(named: "WindowResizerIcon") {
+            if let icon = NSImage(named: "WindowArrangerIcon") {
                 Image(nsImage: icon)
                     .resizable()
                     .scaledToFit()
@@ -1999,7 +1999,7 @@ struct PermissionBanner: View {
                 Text("Accessibility access required")
                     .font(.headline)
 
-                Text("Window Resizer needs Accessibility permission to move and resize windows in other apps.")
+                Text("Window Arranger needs Accessibility permission to move, resize, and arrange windows in other apps.")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

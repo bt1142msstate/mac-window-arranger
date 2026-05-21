@@ -7,17 +7,17 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>Window Resizer</string>
+	<string>Window Arranger</string>
 	<key>CFBundleExecutable</key>
-	<string>Window Resizer</string>
+	<string>Window Arranger</string>
 	<key>CFBundleIconFile</key>
-	<string>WindowResizerIcon</string>
+	<string>WindowArrangerIcon</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.custom.WindowResizer</string>
+	<string>com.custom.WindowArranger</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Window Resizer</string>
+	<string>Window Arranger</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -29,9 +29,9 @@
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Window Resizer uses Apple Events to activate the selected app before resizing its windows.</string>
+	<string>Window Arranger uses Apple Events to activate the selected app before arranging its windows.</string>
 	<key>NSAccessibilityUsageDescription</key>
-	<string>Window Resizer needs Accessibility access to move, resize, and split windows from other apps.</string>
+	<string>Window Arranger needs Accessibility access to move, resize, and arrange windows from other apps.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 </dict>

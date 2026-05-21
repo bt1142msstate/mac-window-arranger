@@ -3,8 +3,8 @@ set -euo pipefail
 
 # macOS stores Accessibility/TCC grants against the app's code identity, not
 # just the visible app name. Keep these stable across every update:
-# - bundle id: com.custom.WindowResizer
-# - installed path: /Applications/Window Resizer.app
+# - bundle id: com.custom.WindowArranger
+# - installed path: /Applications/Window Arranger.app
 # - signing certificate/designated requirement
 #
 # For a public release, replace the local signing identity below with an Apple
@@ -15,29 +15,32 @@ set -euo pipefail
 # keychain stays in Application Support so it is not synced by iCloud.
 
 MODE="${1:-run}"
-APP_NAME="Window Resizer"
-BUNDLE_ID="com.custom.WindowResizer"
+APP_NAME="Window Arranger"
+BUNDLE_ID="com.custom.WindowArranger"
+LEGACY_APP_NAME="Window Resizer"
+LEGACY_BUNDLE_ID="com.custom.WindowResizer"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="$ROOT_DIR/build"
-STAGING_DIR="${TMPDIR:-/tmp}/window-resizer-build/staging"
+STAGING_DIR="${TMPDIR:-/tmp}/window-arranger-build/staging"
 LEGACY_DIST_DIR="$ROOT_DIR/dist"
-ICON_DIR="$BUILD_DIR/window-resizer-icon"
+ICON_DIR="$BUILD_DIR/window-arranger-icon"
 APP_BUNDLE="$STAGING_DIR/$APP_NAME.app"
 APP_CONTENTS="$APP_BUNDLE/Contents"
 APP_MACOS="$APP_CONTENTS/MacOS"
 APP_RESOURCES="$APP_CONTENTS/Resources"
 APP_BINARY="$APP_MACOS/$APP_NAME"
 INSTALL_PATH="/Applications/$APP_NAME.app"
+LEGACY_INSTALL_PATH="/Applications/$LEGACY_APP_NAME.app"
 INSTALL_BINARY="$INSTALL_PATH/Contents/MacOS/$APP_NAME"
-SIGNING_IDENTITY="${WINDOW_RESIZER_SIGNING_IDENTITY:-Window Resizer Local Signing}"
-SIGNING_DIR="${WINDOW_RESIZER_SIGNING_DIR:-$HOME/Library/Application Support/Window Resizer/CodeSigning}"
-SIGNING_KEYCHAIN="$SIGNING_DIR/window-resizer-signing.keychain-db"
-SIGNING_KEYCHAIN_PASSWORD="${WINDOW_RESIZER_SIGNING_KEYCHAIN_PASSWORD:-window-resizer-local-signing}"
-SIGNING_P12_PASSWORD="${WINDOW_RESIZER_SIGNING_P12_PASSWORD:-window-resizer-local-signing-p12}"
+SIGNING_IDENTITY="${WINDOW_ARRANGER_SIGNING_IDENTITY:-Window Arranger Local Signing}"
+SIGNING_DIR="${WINDOW_ARRANGER_SIGNING_DIR:-$HOME/Library/Application Support/Window Arranger/CodeSigning}"
+SIGNING_KEYCHAIN="$SIGNING_DIR/window-arranger-signing.keychain-db"
+SIGNING_KEYCHAIN_PASSWORD="${WINDOW_ARRANGER_SIGNING_KEYCHAIN_PASSWORD:-window-arranger-local-signing}"
+SIGNING_P12_PASSWORD="${WINDOW_ARRANGER_SIGNING_P12_PASSWORD:-window-arranger-local-signing-p12}"
 # This tracked baseline protects Accessibility permission across local updates.
 # If the signing cert is lost or changed, the build fails before replacing the
 # installed app instead of silently resetting macOS privacy permission.
-DESIGNATED_REQUIREMENT_FILE="$ROOT_DIR/script/window-resizer-designated-requirement.txt"
+DESIGNATED_REQUIREMENT_FILE="$ROOT_DIR/script/window-arranger-designated-requirement.txt"
 
 usage() {
   echo "usage: $0 [run|--debug|--logs|--telemetry|--verify|--install]" >&2
@@ -46,10 +49,17 @@ usage() {
 
 kill_running_app() {
   pkill -x "$APP_NAME" >/dev/null 2>&1 || true
+  pkill -x "$LEGACY_APP_NAME" >/dev/null 2>&1 || true
 }
 
 cleanup_duplicate_build_artifacts() {
-  rm -rf "$LEGACY_DIST_DIR/$APP_NAME.app" "$BUILD_DIR/staging/$APP_NAME.app" "$STAGING_DIR"
+  rm -rf \
+    "$LEGACY_DIST_DIR/$APP_NAME.app" \
+    "$LEGACY_DIST_DIR/$LEGACY_APP_NAME.app" \
+    "$BUILD_DIR/staging/$APP_NAME.app" \
+    "$BUILD_DIR/staging/$LEGACY_APP_NAME.app" \
+    "$STAGING_DIR" \
+    "${TMPDIR:-/tmp}/window-resizer-build/staging"
 }
 
 ensure_local_signing_identity() {
@@ -69,10 +79,10 @@ ensure_local_signing_identity() {
   security set-keychain-settings -lut 21600 "$SIGNING_KEYCHAIN" >/dev/null
   security unlock-keychain -p "$SIGNING_KEYCHAIN_PASSWORD" "$SIGNING_KEYCHAIN" >/dev/null
 
-  local openssl_config="$SIGNING_DIR/window-resizer-signing.openssl.cnf"
-  local private_key="$SIGNING_DIR/window-resizer-signing.key.pem"
-  local certificate="$SIGNING_DIR/window-resizer-signing.cert.pem"
-  local p12="$SIGNING_DIR/window-resizer-signing.p12"
+  local openssl_config="$SIGNING_DIR/window-arranger-signing.openssl.cnf"
+  local private_key="$SIGNING_DIR/window-arranger-signing.key.pem"
+  local certificate="$SIGNING_DIR/window-arranger-signing.cert.pem"
+  local p12="$SIGNING_DIR/window-arranger-signing.p12"
 
   cat >"$openssl_config" <<CONFIG
 [ req ]
@@ -189,10 +199,10 @@ Actual:
 $requirement
 
 If this is intentional, run once with:
-WINDOW_RESIZER_ACCEPT_NEW_REQUIREMENT=1 ./script/build_and_run.sh --install
+WINDOW_ARRANGER_ACCEPT_NEW_REQUIREMENT=1 ./script/build_and_run.sh --install
 MESSAGE
 
-  if [[ "${WINDOW_RESIZER_ACCEPT_NEW_REQUIREMENT:-0}" == "1" ]]; then
+  if [[ "${WINDOW_ARRANGER_ACCEPT_NEW_REQUIREMENT:-0}" == "1" ]]; then
     printf '%s\n' "$requirement" > "$DESIGNATED_REQUIREMENT_FILE"
     return
   fi
@@ -202,8 +212,8 @@ MESSAGE
 
 build_icon() {
   mkdir -p "$ICON_DIR"
-  xcrun swift "$ROOT_DIR/scripts/make-window-resizer-icon.swift" "$ICON_DIR" >/dev/null
-  iconutil -c icns "$ICON_DIR/WindowResizerIcon.iconset" -o "$ICON_DIR/WindowResizerIcon.icns"
+  xcrun swift "$ROOT_DIR/scripts/make-window-arranger-icon.swift" "$ICON_DIR" >/dev/null
+  iconutil -c icns "$ICON_DIR/WindowArrangerIcon.iconset" -o "$ICON_DIR/WindowArrangerIcon.icns"
 }
 
 build_bundle() {
@@ -221,7 +231,7 @@ build_bundle() {
   mkdir -p "$APP_MACOS" "$APP_RESOURCES"
   cp -X "$BUILD_DIR/$APP_NAME" "$APP_BINARY"
   cp -X "$ROOT_DIR/source/Info.plist" "$APP_CONTENTS/Info.plist"
-  cp -X "$ICON_DIR/WindowResizerIcon.icns" "$APP_RESOURCES/WindowResizerIcon.icns"
+  cp -X "$ICON_DIR/WindowArrangerIcon.icns" "$APP_RESOURCES/WindowArrangerIcon.icns"
   printf "APPL????" > "$APP_CONTENTS/PkgInfo"
   chmod +x "$APP_BINARY"
   sign_bundle
@@ -232,10 +242,24 @@ open_app() {
 }
 
 install_app() {
+  cleanup_legacy_install
   rm -rf "$INSTALL_PATH"
   ditto "$APP_BUNDLE" "$INSTALL_PATH"
   xattr -cr "$INSTALL_PATH"
   rm -rf "$STAGING_DIR"
+}
+
+cleanup_legacy_install() {
+  if [[ ! -d "$LEGACY_INSTALL_PATH" || "$LEGACY_INSTALL_PATH" == "$INSTALL_PATH" ]]; then
+    return
+  fi
+
+  local legacy_bundle_id
+  legacy_bundle_id="$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$LEGACY_INSTALL_PATH/Contents/Info.plist" 2>/dev/null || true)"
+
+  if [[ "$legacy_bundle_id" == "$LEGACY_BUNDLE_ID" || "$legacy_bundle_id" == "$BUNDLE_ID" ]]; then
+    rm -rf "$LEGACY_INSTALL_PATH"
+  fi
 }
 
 verify_installed_app() {

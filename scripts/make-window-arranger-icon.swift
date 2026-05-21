@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 
 let outputRoot = URL(fileURLWithPath: CommandLine.arguments.dropFirst().first ?? FileManager.default.currentDirectoryPath)
-let iconsetURL = outputRoot.appendingPathComponent("WindowResizerIcon.iconset", isDirectory: true)
+let iconsetURL = outputRoot.appendingPathComponent("WindowArrangerIcon.iconset", isDirectory: true)
 let fileManager = FileManager.default
 
 try? fileManager.removeItem(at: iconsetURL)

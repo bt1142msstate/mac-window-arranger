@@ -1,0 +1,1 @@
+identifier "com.custom.WindowArranger" and certificate leaf = H"aabae24c7764a355b4b76e1d74a66d1621e13273"

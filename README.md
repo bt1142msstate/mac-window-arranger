@@ -1,9 +1,9 @@
-# Mac Window Resizer
+# Mac Window Arranger
 
-Mac Window Resizer is a small macOS SwiftUI utility for resizing and arranging windows from other apps. It can resize the front window or all standard windows for a selected app, arrange selected windows into common layouts, and save layouts that reopen apps and restore their window positions.
+Mac Window Arranger is a small macOS SwiftUI utility for resizing and arranging windows from other apps. It can resize the front window or all standard windows for a selected app, arrange selected windows into common layouts, and save layouts that reopen apps and restore their window positions.
 
 <p align="center">
-  <img src="docs/assets/mac-window-resizer-preview.png" alt="Mac Window Resizer interface preview" width="900">
+  <img src="docs/assets/mac-window-arranger-preview.png" alt="Mac Window Arranger interface preview" width="900">
 </p>
 
 ## Features
@@ -18,12 +18,12 @@ Mac Window Resizer is a small macOS SwiftUI utility for resizing and arranging w
 
 - macOS 14 or newer
 - Xcode command line tools
-- Accessibility permission for Window Resizer
+- Accessibility permission for Window Arranger
 
 ## App Icon
 
 <p>
-  <img src="docs/assets/mac-window-resizer-icon.png" alt="Mac Window Resizer app icon" width="160">
+  <img src="docs/assets/mac-window-arranger-icon.png" alt="Mac Window Arranger app icon" width="160">
 </p>
 
 ## Build and Run
@@ -32,7 +32,7 @@ Mac Window Resizer is a small macOS SwiftUI utility for resizing and arranging w
 ./script/build_and_run.sh
 ```
 
-The build script compiles the Swift source, generates the app icon, signs the app with a local signing identity, installs it at `/Applications/Window Resizer.app`, and opens it.
+The build script compiles the Swift source, generates the app icon, signs the app with a local signing identity, installs it at `/Applications/Window Arranger.app`, and opens it.
 
 Use `--verify` to build, install, launch, and confirm the app starts:
 
@@ -42,10 +42,10 @@ Use `--verify` to build, install, launch, and confirm the app starts:
 
 ## Signing
 
-The script keeps the bundle identifier, install path, and local signing requirement stable so macOS Accessibility permission survives local rebuilds. The local signing keychain is stored under `~/Library/Application Support/Window Resizer/CodeSigning` instead of this repository.
+The script keeps the bundle identifier, install path, and local signing requirement stable so macOS Accessibility permission survives local rebuilds. The local signing keychain is stored under `~/Library/Application Support/Window Arranger/CodeSigning` instead of this repository.
 
 For a public release, replace the local signing identity with an Apple Developer ID Application certificate and notarize the app.
 
 ## Open Source
 
-Mac Window Resizer is open source under the MIT License. See [LICENSE](LICENSE) for details.
+Mac Window Arranger is open source under the MIT License. See [LICENSE](LICENSE) for details.

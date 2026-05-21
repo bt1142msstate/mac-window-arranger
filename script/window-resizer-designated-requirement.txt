@@ -1,1 +1,0 @@
-identifier "com.custom.WindowResizer" and certificate leaf = H"850f72b5a8f263ceb3347a96d8a2ef7ae62957e1"
