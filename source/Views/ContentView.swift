@@ -510,19 +510,12 @@ private struct TargetSection: View {
         Panel(title: "Target", symbolName: "app.dashed") {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 10) {
-                    Picker("Application", selection: $store.selectedAppName) {
-                        if store.runningApps.isEmpty {
-                            Text("No running apps found").tag("")
-                        }
-
-                        ForEach(store.runningApps) { app in
-                            ApplicationPickerRow(app: app)
-                                .tag(app.name)
-                        }
-                    }
-                    .labelsHidden()
+                    ApplicationSelectionMenu(
+                        apps: store.runningApps,
+                        selection: $store.selectedAppName,
+                        isDisabled: store.isExecuting || store.isPickingWindow
+                    )
                     .frame(maxWidth: .infinity)
-                    .disabled(store.isExecuting || store.isPickingWindow)
 
                     Button(action: store.pickWindowAndResize) {
                         Label(store.isPickingWindow ? "Picking" : "Pick Window", systemImage: "scope")
@@ -542,16 +535,88 @@ private struct TargetSection: View {
     }
 }
 
+private struct ApplicationSelectionMenu: View {
+    let apps: [AppItem]
+    @Binding var selection: String
+    let isDisabled: Bool
+
+    private var selectedApp: AppItem? {
+        apps.first { $0.name == selection }
+    }
+
+    var body: some View {
+        Menu {
+            if apps.isEmpty {
+                Text("No running apps found")
+            } else {
+                ForEach(apps) { app in
+                    Button {
+                        selection = app.name
+                    } label: {
+                        ApplicationPickerRow(app: app, isSelected: app.name == selection)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                if let selectedApp {
+                    ApplicationIconImage(
+                        bundleIdentifier: selectedApp.bundleIdentifier,
+                        appName: selectedApp.name,
+                        size: 18
+                    )
+                } else {
+                    Image(systemName: "app.dashed")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 18, height: 18)
+                }
+
+                Text(selectedApp?.name ?? "No running apps found")
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
+            .padding(.horizontal, 9)
+            .frame(height: 28)
+            .frame(maxWidth: .infinity)
+            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled || apps.isEmpty)
+    }
+}
+
 private struct ApplicationPickerRow: View {
     let app: AppItem
+    var isSelected = false
 
     var body: some View {
         HStack(spacing: 7) {
-            ApplicationIconImage(
-                bundleIdentifier: app.bundleIdentifier,
-                appName: app.name,
-                size: 18
-            )
+            ZStack(alignment: .bottomTrailing) {
+                ApplicationIconImage(
+                    bundleIdentifier: app.bundleIdentifier,
+                    appName: app.name,
+                    size: 18
+                )
+
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(.white, .blue)
+                        .offset(x: 2, y: 2)
+                }
+            }
+            .frame(width: 20)
 
             Text(app.name)
         }
