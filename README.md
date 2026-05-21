@@ -25,7 +25,8 @@ Mac Window Arranger is a small native macOS SwiftUI utility for resizing and arr
 - Built as a local signed, hardened-runtime universal macOS app (`arm64` and `x86_64`).
 - Installed by the build script at `/Applications/Window Arranger.app`.
 - Privacy manifest is bundled at `Contents/Resources/PrivacyInfo.xcprivacy`.
-- App Sandbox is intentionally disabled because sandboxed builds cannot access other apps' windows through Accessibility. The practical public release path is Developer ID signing plus notarization, not Mac App Store submission.
+- Planned public release: free on the Mac App Store.
+- Current App Store blocker: App Sandbox is intentionally disabled because sandboxed builds cannot access other apps' windows through Accessibility. Developer ID signing plus notarization is the fallback path while that blocker is unresolved.
 
 See [docs/STORE_SUBMISSION.md](docs/STORE_SUBMISSION.md) for distribution details and remaining release work.
 

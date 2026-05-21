@@ -1,9 +1,10 @@
 # Distribution Readiness
 
-This project is close to a signed, notarized direct-distribution shape. Mac App
-Store submission is currently blocked by App Sandbox: sandboxed builds cannot see
-or arrange other apps' windows through Accessibility on this Mac, which breaks
-the app's core feature.
+This project is intended to launch as a free Mac App Store app. The current build
+is close to a signed, notarized direct-distribution shape, but Mac App Store
+submission is blocked by App Sandbox: sandboxed builds cannot see or arrange
+other apps' windows through Accessibility on this Mac, which breaks the app's
+core feature.
 
 ## Implemented In The App
 
@@ -32,8 +33,7 @@ other apps. Local testing showed:
   still cannot find the layout windows.
 
 Until Apple provides or approves a viable sandbox exception for this behavior,
-the realistic public distribution path is Developer ID signing plus notarization,
-not Mac App Store upload.
+Developer ID signing plus notarization remains the fallback distribution path.
 
 Apple references:
 
@@ -57,7 +57,7 @@ Apple references:
 - Fill privacy disclosures: no tracking, no analytics, no network collection;
   disclose on-device window/app title access in release notes or reviewer notes.
 - Prepare screenshots, app description, support URL, marketing URL if desired,
-  age rating, category, and pricing.
+  age rating, category, and free pricing.
 
 ## Local Validation
 
