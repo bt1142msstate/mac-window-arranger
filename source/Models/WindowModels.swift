@@ -230,7 +230,7 @@ struct LayoutPreviewPane: Identifiable, Hashable {
 
     var primaryLabel: String {
         guard let appName, !appName.isEmpty else {
-            return "Choose window"
+            return "Choose Window"
         }
 
         return appName

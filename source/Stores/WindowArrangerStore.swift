@@ -125,6 +125,7 @@ final class WindowArrangerStore {
             && hasCompleteLayoutSelection
             && hasAccessibilityAccess
             && !isExecuting
+            && !isPickingWindow
     }
 
     var selectedSavedLayout: SavedLayout? {
@@ -140,17 +141,23 @@ final class WindowArrangerStore {
             && hasCompleteLayoutSelection
             && hasAccessibilityAccess
             && !isExecuting
+            && !isPickingWindow
     }
 
     var canApplyLayout: Bool {
         selectedSavedLayout != nil
             && hasAccessibilityAccess
             && !isExecuting
+            && !isPickingWindow
     }
 
     var splitPickerStatusText: String {
         if !hasAccessibilityAccess {
             return "Grant Accessibility access to list windows."
+        }
+
+        if isPickingWindow {
+            return "Hover over a window, then click to choose it."
         }
 
         if availableWindows.count < layoutSlotCount {
@@ -353,9 +360,39 @@ final class WindowArrangerStore {
         resultKind = .neutral
         executionResult = "Hover over a window, then click to resize it."
 
-        AppDelegate.shared?.beginWindowResizePick(
+        AppDelegate.shared?.beginWindowPick(
             onPicked: { [weak self] window in
                 self?.executePickedWindowResize(window)
+            },
+            onCancelled: { [weak self] in
+                self?.finishWindowPickCancellation()
+            }
+        )
+    }
+
+    func pickWindowForLayoutSlot(at index: Int) {
+        guard !isExecuting, !isPickingWindow else {
+            return
+        }
+
+        guard (0..<layoutSlotCount).contains(index) else {
+            return
+        }
+
+        guard hasAccessibilityAccess else {
+            resultKind = .error
+            executionResult = "Grant Accessibility access before choosing a window."
+            return
+        }
+
+        loadAvailableWindows(preserveSelection: true)
+        isPickingWindow = true
+        resultKind = .neutral
+        executionResult = "Hover over a window, then click to choose it for \(splitSlotTitle(for: index))."
+
+        AppDelegate.shared?.beginWindowPick(
+            onPicked: { [weak self] window in
+                self?.executePickedLayoutWindow(window, at: index)
             },
             onCancelled: { [weak self] in
                 self?.finishWindowPickCancellation()
@@ -376,6 +413,12 @@ final class WindowArrangerStore {
         selectedSplitWindowIDs = normalizedSelectionIDs(selectedSplitWindowIDs)
 
         if selectedSplitWindowIDs.indices.contains(index) {
+            if !selectedID.isEmpty {
+                for selectionIndex in selectedSplitWindowIDs.indices where selectionIndex != index && selectedSplitWindowIDs[selectionIndex] == selectedID {
+                    selectedSplitWindowIDs[selectionIndex] = ""
+                }
+            }
+
             selectedSplitWindowIDs[index] = selectedID
         }
     }
@@ -579,6 +622,20 @@ final class WindowArrangerStore {
                 self.finishWindowAction(with: resultMessage)
             }
         }
+    }
+
+    private func executePickedLayoutWindow(_ window: WindowItem, at index: Int) {
+        isPickingWindow = false
+        loadAvailableWindows(preserveSelection: true)
+
+        if !availableWindows.contains(where: { $0.id == window.id }) {
+            availableWindows.append(window)
+        }
+
+        setSplitWindowSelection(window.id, at: index)
+        resultKind = .neutral
+        executionResult = "Selected \(window.displayName) for \(splitSlotTitle(for: index))."
+        AppDelegate.shared?.bringMainWindowForward()
     }
 
     private func persistSavedLayouts() {

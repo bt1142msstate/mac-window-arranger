@@ -254,6 +254,8 @@ private struct LayoutMockupPreview: View {
     var height: CGFloat = 142
     var isDisabled = false
     var selectWindow: ((Int, String) -> Void)?
+    var chooseWindow: ((Int) -> Void)?
+    @State private var activePanePosition: Int?
 
     var body: some View {
         GeometryReader { proxy in
@@ -272,47 +274,54 @@ private struct LayoutMockupPreview: View {
             }
         }
         .frame(height: height)
-        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder
     private func paneContent(for pane: LayoutPreviewPane) -> some View {
         if let selectWindow {
-            Menu {
-                if windows.isEmpty {
-                    Label("No windows available", systemImage: "exclamationmark.triangle")
-                } else {
-                    Button {
-                        selectWindow(pane.position, "")
-                    } label: {
-                        Label("Choose window", systemImage: pane.selectedWindowID == nil ? "checkmark.circle.fill" : "circle")
-                    }
-
-                    Divider()
-
-                    ForEach(windows) { window in
-                        let isCurrentSelection = pane.selectedWindowID == window.id
-                        let isUsedElsewhere = panes.contains { otherPane in
-                            otherPane.position != pane.position && otherPane.selectedWindowID == window.id
-                        }
-
-                        Button {
-                            selectWindow(pane.position, window.id)
-                        } label: {
-                            Label(window.displayName, systemImage: isCurrentSelection ? "checkmark.circle.fill" : "macwindow")
-                        }
-                        .disabled(isUsedElsewhere && !isCurrentSelection)
-                    }
-                }
+            Button {
+                activePanePosition = pane.position
             } label: {
                 LayoutMockupPaneView(pane: pane, showsMenuIndicator: true)
             }
             .buttonStyle(.plain)
             .disabled(isDisabled)
             .help("Choose \(pane.slotTitle)")
+            .popover(isPresented: isPopoverPresented(for: pane.position), arrowEdge: .bottom) {
+                LayoutPaneWindowChooser(
+                    pane: pane,
+                    panes: panes,
+                    windows: windows,
+                    chooseWindow: {
+                        activePanePosition = nil
+                        chooseWindow?(pane.position)
+                    },
+                    clearSelection: {
+                        activePanePosition = nil
+                        selectWindow(pane.position, "")
+                    },
+                    selectWindow: { selectedID in
+                        activePanePosition = nil
+                        selectWindow(pane.position, selectedID)
+                    }
+                )
+            }
         } else {
             LayoutMockupPaneView(pane: pane)
         }
+    }
+
+    private func isPopoverPresented(for position: Int) -> Binding<Bool> {
+        Binding(
+            get: {
+                activePanePosition == position
+            },
+            set: { isPresented in
+                if !isPresented {
+                    activePanePosition = nil
+                }
+            }
+        )
     }
 
     private func previewFrame(for pane: LayoutPreviewPane, in size: CGSize) -> CGRect {
@@ -327,6 +336,81 @@ private struct LayoutMockupPreview: View {
             width: max((pane.frame.width * availableWidth) - paneSpacing, 38),
             height: max((pane.frame.height * availableHeight) - paneSpacing, 38)
         )
+    }
+}
+
+private struct LayoutPaneWindowChooser: View {
+    let pane: LayoutPreviewPane
+    let panes: [LayoutPreviewPane]
+    let windows: [WindowItem]
+    let chooseWindow: () -> Void
+    let clearSelection: () -> Void
+    let selectWindow: (String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(pane.slotTitle)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            Button(action: chooseWindow) {
+                Label("Choose Window", systemImage: "scope")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.borderedProminent)
+
+            if pane.selectedWindowID != nil {
+                Button(action: clearSelection) {
+                    Label("Clear Selection", systemImage: "xmark.circle")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.bordered)
+            }
+
+            Divider()
+
+            if windows.isEmpty {
+                Label("No visible windows listed", systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 4)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(windows) { window in
+                            let isCurrentSelection = pane.selectedWindowID == window.id
+                            let isUsedElsewhere = panes.contains { otherPane in
+                                otherPane.position != pane.position && otherPane.selectedWindowID == window.id
+                            }
+
+                            Button {
+                                selectWindow(window.id)
+                            } label: {
+                                HStack(spacing: 7) {
+                                    Image(systemName: isCurrentSelection ? "checkmark.circle.fill" : "macwindow")
+                                        .foregroundStyle(isCurrentSelection ? .blue : .secondary)
+                                        .frame(width: 16)
+
+                                    Text(window.displayName)
+                                        .lineLimit(1)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(isUsedElsewhere && !isCurrentSelection ? .secondary : .primary)
+                            .disabled(isUsedElsewhere && !isCurrentSelection)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 5)
+                            .background(isCurrentSelection ? Color.blue.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                        }
+                    }
+                }
+                .frame(maxHeight: 210)
+            }
+        }
+        .padding(12)
+        .frame(width: 310, alignment: .leading)
     }
 }
 
@@ -379,6 +463,7 @@ private struct LayoutMockupPaneView: View {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .stroke(pane.hasWindow ? Color.blue.opacity(0.42) : Color.secondary.opacity(0.18), lineWidth: 1)
         )
+        .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         .accessibilityLabel("\(pane.slotTitle), \(pane.primaryLabel), \(pane.secondaryLabel)")
     }
 }
@@ -471,10 +556,14 @@ private struct LayoutBuilderSection: View {
                     panes: store.layoutPreviewPanes,
                     windows: store.availableWindows,
                     height: 172,
-                    isDisabled: store.isExecuting
-                ) { position, selectedID in
-                    store.setSplitWindowSelection(selectedID, at: position)
-                }
+                    isDisabled: store.isExecuting || store.isPickingWindow,
+                    selectWindow: { position, selectedID in
+                        store.setSplitWindowSelection(selectedID, at: position)
+                    },
+                    chooseWindow: { position in
+                        store.pickWindowForLayoutSlot(at: position)
+                    }
+                )
 
                 HStack(alignment: .center, spacing: 10) {
                     Label(store.splitPickerStatusText, systemImage: "rectangle.split.3x1")

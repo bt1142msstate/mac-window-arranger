@@ -92,7 +92,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    func beginWindowResizePick(
+    func beginWindowPick(
         onPicked: @escaping (WindowItem) -> Void,
         onCancelled: @escaping () -> Void
     ) {
