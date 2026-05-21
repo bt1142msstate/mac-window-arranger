@@ -41,25 +41,50 @@ struct WindowManagementService {
         return NSWorkspace.shared.runningApplications
             .filter { $0.activationPolicy == .regular }
             .compactMap { app -> AppItem? in
-                guard let name = app.localizedName, name != "Window Arranger" else {
+                guard let item = appItem(for: app) else {
                     return nil
                 }
 
-                let inserted = seenNames.insert(name).inserted
+                let inserted = seenNames.insert(item.name).inserted
                 guard inserted else {
                     return nil
                 }
 
-                return AppItem(
-                    id: app.bundleIdentifier ?? name,
-                    name: name,
-                    bundleIdentifier: app.bundleIdentifier
-                )
+                return item
             }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
+    private func appItem(for app: NSRunningApplication) -> AppItem? {
+        guard app.activationPolicy == .regular, let name = app.localizedName, name != "Window Arranger" else {
+            return nil
+        }
+
+        return AppItem(
+            id: app.bundleIdentifier ?? name,
+            name: name,
+            bundleIdentifier: app.bundleIdentifier
+        )
+    }
+
     func collectAvailableWindows() -> [WindowItem] {
+        collectVisibleWindowItems()
+    }
+
+    func windowUnderMouse() -> WindowItem? {
+        let mouseLocation = NSEvent.mouseLocation
+        let windowListPoint = windowListPoint(from: mouseLocation)
+
+        return collectVisibleWindowItems().first { window in
+            window.frame.contains(windowListPoint)
+        }
+    }
+
+    func appKitFrame(for window: WindowItem) -> CGRect? {
+        appKitFrame(fromWindowListFrame: window.frame)
+    }
+
+    private func collectVisibleWindowItems() -> [WindowItem] {
         guard AXIsProcessTrusted() else {
             return []
         }
@@ -315,10 +340,68 @@ struct WindowManagementService {
             return "Error: Application is running but has no visible windows."
         }
 
+        let result = resizeWindowElements(targetWindows, dimensions: dimensions)
+
+        activate(app)
+
+        if result.messages.isEmpty {
+            return "Resized \(result.successCount) window(s) of \(appName) to \(dimensions.width)x\(dimensions.height)."
+        }
+
+        if result.successCount > 0 {
+            return "\(result.successCount) window(s) resized.\n\n" + result.messages.joined(separator: "\n")
+        }
+
+        return result.messages.joined(separator: "\n")
+    }
+
+    func executeResize(window: WindowItem, dimensions: (width: Int, height: Int), resizeAllWindows: Bool) -> String {
+        guard AXIsProcessTrusted() else {
+            return "Error: Accessibility access is required before resizing windows."
+        }
+
+        if resizeAllWindows {
+            return executeResize(
+                appName: window.appName,
+                dimensions: dimensions,
+                resizeAllWindows: true
+            )
+        }
+
+        guard let windowElement = resolveWindowElement(for: window) else {
+            return "Failed: Could not access \(window.displayName)."
+        }
+
+        if let app = NSRunningApplication(processIdentifier: window.processIdentifier) {
+            activate(app)
+            Thread.sleep(forTimeInterval: 0.15)
+        }
+
+        let result = resizeWindowElements([windowElement], dimensions: dimensions)
+
+        if let app = NSRunningApplication(processIdentifier: window.processIdentifier) {
+            activate(app)
+        }
+
+        if result.messages.isEmpty {
+            return "Resized \(window.displayName) to \(dimensions.width)x\(dimensions.height)."
+        }
+
+        if result.successCount > 0 {
+            return "Resized \(window.displayName).\n\n" + result.messages.joined(separator: "\n")
+        }
+
+        return result.messages.joined(separator: "\n")
+    }
+
+    private func resizeWindowElements(
+        _ windowElements: [AXUIElement],
+        dimensions: (width: Int, height: Int)
+    ) -> (successCount: Int, messages: [String]) {
         var messages: [String] = []
         var successCount = 0
 
-        for windowElement in targetWindows {
+        for windowElement in windowElements {
             let originalSize = axSizeValue(windowElement, attribute: kAXSizeAttribute as CFString)
             let targetFrame = resizeFrame(for: windowElement, dimensions: dimensions)
             let resizeResult = applyFrame(targetFrame, to: windowElement)
@@ -349,17 +432,7 @@ struct WindowManagementService {
             }
         }
 
-        activate(app)
-
-        if messages.isEmpty {
-            return "Resized \(successCount) window(s) of \(appName) to \(dimensions.width)x\(dimensions.height)."
-        }
-
-        if successCount > 0 {
-            return "\(successCount) window(s) resized.\n\n" + messages.joined(separator: "\n")
-        }
-
-        return messages.joined(separator: "\n")
+        return (successCount, messages)
     }
 
     private func openApplicationIfNeeded(for slot: SavedLayoutSlot) -> String? {
@@ -842,6 +915,49 @@ struct WindowManagementService {
         }
 
         return frames
+    }
+
+    private func windowListPoint(from appKitPoint: CGPoint) -> CGPoint {
+        guard
+            let screen = NSScreen.screens.first(where: { $0.frame.contains(appKitPoint) }),
+            let displayBounds = displayBounds(for: screen)
+        else {
+            return appKitPoint
+        }
+
+        return CGPoint(
+            x: displayBounds.minX + (appKitPoint.x - screen.frame.minX),
+            y: displayBounds.minY + (screen.frame.maxY - appKitPoint.y)
+        )
+    }
+
+    private func appKitFrame(fromWindowListFrame frame: CGRect) -> CGRect? {
+        let midpoint = CGPoint(x: frame.midX, y: frame.midY)
+
+        guard let match = NSScreen.screens.compactMap({ screen -> (screen: NSScreen, displayBounds: CGRect)? in
+            guard let displayBounds = displayBounds(for: screen), displayBounds.contains(midpoint) else {
+                return nil
+            }
+
+            return (screen, displayBounds)
+        }).first else {
+            return nil
+        }
+
+        return CGRect(
+            x: match.screen.frame.minX + (frame.minX - match.displayBounds.minX),
+            y: match.screen.frame.maxY - (frame.minY - match.displayBounds.minY) - frame.height,
+            width: frame.width,
+            height: frame.height
+        )
+    }
+
+    private func displayBounds(for screen: NSScreen) -> CGRect? {
+        guard let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID else {
+            return nil
+        }
+
+        return CGDisplayBounds(displayID)
     }
 
     private func cgFloatValue(_ value: Any?) -> CGFloat {

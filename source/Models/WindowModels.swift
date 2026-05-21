@@ -27,6 +27,34 @@ struct WindowItem: Identifiable, Hashable {
     }
 }
 
+enum WindowWorkflowMode: String, CaseIterable, Identifiable, Hashable {
+    case resize
+    case arrange
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .resize: "Resize"
+        case .arrange: "Arrange"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .resize: "aspectratio"
+        case .arrange: "rectangle.3.group"
+        }
+    }
+
+    var contentSize: CGSize {
+        switch self {
+        case .resize: CGSize(width: 760, height: 390)
+        case .arrange: CGSize(width: 760, height: 560)
+        }
+    }
+}
+
 enum LayoutKind: String, CaseIterable, Identifiable, Codable {
     case twoColumns
     case threeColumns
