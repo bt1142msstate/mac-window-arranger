@@ -17,7 +17,7 @@ Mac Window Arranger is a small native macOS SwiftUI utility for resizing and arr
 ## Features
 
 - Resize the frontmost window or every standard window for a selected app.
-- Search running and installed apps from the resize target picker; installed apps launch before resizing.
+- Search running and installed apps from the resize target picker, prioritized by focused app, visible windows, running apps, then installed apps.
 - Pick the resize target from the app picker, or use Pick Window to outline a hovered window and resize it on click.
 - Use presets for common sizes like 1080p, 720p, mobile, tablet, and square.
 - Arrange selected windows into two-column, three-column, four-grid, and focus-stack layouts.

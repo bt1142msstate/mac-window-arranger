@@ -8,23 +8,37 @@ struct AppItem: Identifiable, Hashable {
     let bundleIdentifier: String?
     let bundleURL: URL?
     let isRunning: Bool
+    let hasVisibleWindows: Bool
+    let isFocused: Bool
 
     init(
         id: String,
         name: String,
         bundleIdentifier: String?,
         bundleURL: URL? = nil,
-        isRunning: Bool = true
+        isRunning: Bool = true,
+        hasVisibleWindows: Bool = false,
+        isFocused: Bool = false
     ) {
         self.id = id
         self.name = name
         self.bundleIdentifier = bundleIdentifier
         self.bundleURL = bundleURL
         self.isRunning = isRunning
+        self.hasVisibleWindows = hasVisibleWindows
+        self.isFocused = isFocused
     }
 
     var statusLabel: String {
-        isRunning ? "Running" : "Installed"
+        if isFocused {
+            return "Focused"
+        }
+
+        if hasVisibleWindows {
+            return "Visible"
+        }
+
+        return isRunning ? "Running" : "Installed"
     }
 }
 

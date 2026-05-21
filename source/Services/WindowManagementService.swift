@@ -51,18 +51,28 @@ struct WindowManagementService {
         }
 
         return mergedAppsByID.values
-            .sorted { lhs, rhs in
-                lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
-            }
+            .sorted(by: appPickerSort)
     }
 
     private func loadRunningAppItems() -> [AppItem] {
         var seenIDs = Set<String>()
+        let runningApplications = NSWorkspace.shared.runningApplications
+        let visibleAppIDs = visibleRunningAppIDs(from: runningApplications)
+        let focusedAppID = focusedApplicationID(
+            from: runningApplications,
+            visibleAppIDs: visibleAppIDs
+        )
 
-        return NSWorkspace.shared.runningApplications
+        return runningApplications
             .filter { $0.activationPolicy == .regular }
             .compactMap { app -> AppItem? in
-                guard let item = appItem(for: app) else {
+                guard
+                    let item = appItem(
+                        for: app,
+                        hasVisibleWindows: visibleAppIDs.contains(appIdentity(for: app)),
+                        isFocused: appIdentity(for: app) == focusedAppID
+                    )
+                else {
                     return nil
                 }
 
@@ -75,18 +85,166 @@ struct WindowManagementService {
             }
     }
 
-    private func appItem(for app: NSRunningApplication) -> AppItem? {
+    private func appItem(
+        for app: NSRunningApplication,
+        hasVisibleWindows: Bool,
+        isFocused: Bool
+    ) -> AppItem? {
         guard app.activationPolicy == .regular, let name = app.localizedName, name != "Window Arranger" else {
             return nil
         }
 
         return AppItem(
-            id: app.bundleIdentifier ?? app.bundleURL?.path ?? name,
+            id: appIdentity(for: app),
             name: name,
             bundleIdentifier: app.bundleIdentifier,
             bundleURL: app.bundleURL,
-            isRunning: true
+            isRunning: true,
+            hasVisibleWindows: hasVisibleWindows,
+            isFocused: isFocused
         )
+    }
+
+    private func appPickerSort(_ lhs: AppItem, _ rhs: AppItem) -> Bool {
+        let lhsRank = appPickerRank(lhs)
+        let rhsRank = appPickerRank(rhs)
+
+        if lhsRank != rhsRank {
+            return lhsRank < rhsRank
+        }
+
+        let nameComparison = lhs.name.localizedCaseInsensitiveCompare(rhs.name)
+
+        if nameComparison != .orderedSame {
+            return nameComparison == .orderedAscending
+        }
+
+        return lhs.id.localizedCaseInsensitiveCompare(rhs.id) == .orderedAscending
+    }
+
+    private func appPickerRank(_ app: AppItem) -> Int {
+        if app.isFocused {
+            return 0
+        }
+
+        if app.isRunning, app.hasVisibleWindows {
+            return 1
+        }
+
+        if app.isRunning {
+            return 2
+        }
+
+        return 3
+    }
+
+    private func appIdentity(for app: NSRunningApplication) -> String {
+        app.bundleIdentifier ?? app.bundleURL?.path ?? app.localizedName ?? "\(app.processIdentifier)"
+    }
+
+    private func visibleRunningAppIDs(from runningApplications: [NSRunningApplication]) -> Set<String> {
+        guard let windowInfo = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
+            return []
+        }
+
+        let regularAppsByPID = regularApplicationsByPID(runningApplications)
+        var visibleIDs = Set<String>()
+
+        for info in windowInfo {
+            guard
+                let processIdentifier = info[kCGWindowOwnerPID as String] as? pid_t,
+                let app = regularAppsByPID[processIdentifier],
+                let layer = info[kCGWindowLayer as String] as? Int,
+                layer == 0,
+                let bounds = info[kCGWindowBounds as String] as? [String: Any]
+            else {
+                continue
+            }
+
+            let width = cgFloatValue(bounds["Width"])
+            let height = cgFloatValue(bounds["Height"])
+
+            guard width >= 80, height >= 80 else {
+                continue
+            }
+
+            visibleIDs.insert(appIdentity(for: app))
+        }
+
+        return visibleIDs
+    }
+
+    private func focusedApplicationID(
+        from runningApplications: [NSRunningApplication],
+        visibleAppIDs: Set<String>
+    ) -> String? {
+        if
+            let frontmostApplication = NSWorkspace.shared.frontmostApplication,
+            isExternalRegularApplication(frontmostApplication)
+        {
+            return appIdentity(for: frontmostApplication)
+        }
+
+        return topVisibleExternalApplicationID(
+            from: runningApplications,
+            visibleAppIDs: visibleAppIDs
+        )
+    }
+
+    private func topVisibleExternalApplicationID(
+        from runningApplications: [NSRunningApplication],
+        visibleAppIDs: Set<String>
+    ) -> String? {
+        guard let windowInfo = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
+            return nil
+        }
+
+        let regularAppsByPID = regularApplicationsByPID(runningApplications)
+
+        for info in windowInfo {
+            guard
+                let processIdentifier = info[kCGWindowOwnerPID as String] as? pid_t,
+                let app = regularAppsByPID[processIdentifier],
+                let layer = info[kCGWindowLayer as String] as? Int,
+                layer == 0,
+                let bounds = info[kCGWindowBounds as String] as? [String: Any]
+            else {
+                continue
+            }
+
+            let appID = appIdentity(for: app)
+
+            guard visibleAppIDs.contains(appID) else {
+                continue
+            }
+
+            let width = cgFloatValue(bounds["Width"])
+            let height = cgFloatValue(bounds["Height"])
+
+            guard width >= 80, height >= 80 else {
+                continue
+            }
+
+            return appID
+        }
+
+        return nil
+    }
+
+    private func regularApplicationsByPID(_ applications: [NSRunningApplication]) -> [pid_t: NSRunningApplication] {
+        var appsByPID: [pid_t: NSRunningApplication] = [:]
+
+        for app in applications where isExternalRegularApplication(app) {
+            appsByPID[app.processIdentifier] = app
+        }
+
+        return appsByPID
+    }
+
+    private func isExternalRegularApplication(_ app: NSRunningApplication) -> Bool {
+        app.activationPolicy == .regular
+            && app.localizedName != "Window Arranger"
+            && app.processIdentifier > 0
     }
 
     private func loadInstalledApps() -> [AppItem] {
