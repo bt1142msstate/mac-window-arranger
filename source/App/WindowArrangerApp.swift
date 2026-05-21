@@ -14,7 +14,7 @@ struct WindowArrangerApp: App {
 
             CommandMenu("Window Arranger") {
                 Button("Show Window Arranger") {
-                    AppDelegate.shared?.bringMainWindowForward()
+                    AppDelegate.shared?.showExpandedWindow()
                 }
                 .keyboardShortcut("0", modifiers: [.command, .option])
 

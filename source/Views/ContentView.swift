@@ -701,8 +701,8 @@ private struct TargetSection: View {
                     .disabled(store.isExecuting || store.isPickingWindow)
                 }
 
-                if let selectedApp = store.runningApps.first(where: { $0.name == store.selectedAppName }) {
-                    Label(selectedApp.bundleIdentifier ?? "Running application", systemImage: "checkmark.circle")
+                if let selectedApp = store.selectedApp {
+                    Label(selectedApp.bundleIdentifier ?? selectedApp.statusLabel, systemImage: selectedApp.isRunning ? "checkmark.circle" : "arrow.down.app")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -716,24 +716,30 @@ private struct ApplicationSelectionMenu: View {
     let apps: [AppItem]
     @Binding var selection: String
     let isDisabled: Bool
+    @State private var isShowingPicker = false
+    @State private var searchText = ""
 
     private var selectedApp: AppItem? {
         apps.first { $0.name == selection }
     }
 
+    private var filteredApps: [AppItem] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !query.isEmpty else {
+            return apps
+        }
+
+        return apps.filter { app in
+            app.name.localizedCaseInsensitiveContains(query)
+                || app.bundleIdentifier?.localizedCaseInsensitiveContains(query) == true
+        }
+    }
+
     var body: some View {
-        Menu {
-            if apps.isEmpty {
-                Text("No running apps found")
-            } else {
-                ForEach(apps) { app in
-                    Button {
-                        selection = app.name
-                    } label: {
-                        ApplicationPickerRow(app: app, isSelected: app.name == selection)
-                    }
-                }
-            }
+        Button {
+            searchText = ""
+            isShowingPicker.toggle()
         } label: {
             HStack(spacing: 8) {
                 if let selectedApp {
@@ -749,9 +755,23 @@ private struct ApplicationSelectionMenu: View {
                         .frame(width: 18, height: 18)
                 }
 
-                Text(selectedApp?.name ?? "No running apps found")
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(selectedApp?.name ?? "Search apps")
+                        .lineLimit(1)
+
+                    if let selectedApp {
+                        Text(selectedApp.statusLabel)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Image(systemName: "magnifyingglass")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
 
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.caption2.weight(.semibold))
@@ -759,7 +779,7 @@ private struct ApplicationSelectionMenu: View {
                     .accessibilityHidden(true)
             }
             .padding(.horizontal, 9)
-            .frame(height: 28)
+            .frame(height: 34)
             .frame(maxWidth: .infinity)
             .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             .overlay(
@@ -770,6 +790,41 @@ private struct ApplicationSelectionMenu: View {
         }
         .buttonStyle(.plain)
         .disabled(isDisabled || apps.isEmpty)
+        .popover(isPresented: $isShowingPicker, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 9) {
+                TextField("Search apps", text: $searchText)
+                    .textFieldStyle(.roundedBorder)
+
+                if filteredApps.isEmpty {
+                    Label("No apps found", systemImage: "magnifyingglass")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 10)
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 4) {
+                            ForEach(filteredApps) { app in
+                                Button {
+                                    selection = app.name
+                                    isShowingPicker = false
+                                } label: {
+                                    ApplicationPickerRow(app: app, isSelected: app.name == selection)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 5)
+                                .background(app.name == selection ? Color.blue.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 260)
+                }
+            }
+            .padding(12)
+            .frame(width: 330, alignment: .leading)
+        }
     }
 }
 
@@ -783,7 +838,7 @@ private struct ApplicationPickerRow: View {
                 ApplicationIconImage(
                     bundleIdentifier: app.bundleIdentifier,
                     appName: app.name,
-                    size: 18
+                    size: 20
                 )
 
                 if isSelected {
@@ -793,9 +848,26 @@ private struct ApplicationPickerRow: View {
                         .offset(x: 2, y: 2)
                 }
             }
-            .frame(width: 20)
+            .frame(width: 22)
 
-            Text(app.name)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(app.name)
+                    .lineLimit(1)
+
+                Text(app.bundleIdentifier ?? app.statusLabel)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+
+            Text(app.statusLabel)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(app.isRunning ? .green : .secondary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(Color.secondary.opacity(0.10), in: Capsule())
         }
     }
 }

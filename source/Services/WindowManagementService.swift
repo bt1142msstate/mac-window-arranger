@@ -3,6 +3,8 @@ import ApplicationServices
 import Foundation
 
 struct WindowManagementService {
+    private static var installedAppCache: [AppItem]?
+
     private struct LayoutWindowCandidate {
         let key: String
         let appName: String
@@ -36,7 +38,26 @@ struct WindowManagementService {
     }
 
     func loadRunningApps() -> [AppItem] {
-        var seenNames = Set<String>()
+        let runningApps = loadRunningAppItems()
+        let installedApps = loadInstalledApps()
+        var mergedAppsByID: [String: AppItem] = [:]
+
+        for app in installedApps {
+            mergedAppsByID[app.id] = app
+        }
+
+        for app in runningApps {
+            mergedAppsByID[app.id] = app
+        }
+
+        return mergedAppsByID.values
+            .sorted { lhs, rhs in
+                lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+            }
+    }
+
+    private func loadRunningAppItems() -> [AppItem] {
+        var seenIDs = Set<String>()
 
         return NSWorkspace.shared.runningApplications
             .filter { $0.activationPolicy == .regular }
@@ -45,14 +66,13 @@ struct WindowManagementService {
                     return nil
                 }
 
-                let inserted = seenNames.insert(item.name).inserted
+                let inserted = seenIDs.insert(item.id).inserted
                 guard inserted else {
                     return nil
                 }
 
                 return item
             }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
     private func appItem(for app: NSRunningApplication) -> AppItem? {
@@ -61,9 +81,75 @@ struct WindowManagementService {
         }
 
         return AppItem(
-            id: app.bundleIdentifier ?? name,
+            id: app.bundleIdentifier ?? app.bundleURL?.path ?? name,
             name: name,
-            bundleIdentifier: app.bundleIdentifier
+            bundleIdentifier: app.bundleIdentifier,
+            bundleURL: app.bundleURL,
+            isRunning: true
+        )
+    }
+
+    private func loadInstalledApps() -> [AppItem] {
+        if let installedAppCache = Self.installedAppCache {
+            return installedAppCache
+        }
+
+        let fileManager = FileManager.default
+        let homeApplicationsURL = fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Applications")
+        let searchRoots = [
+            URL(fileURLWithPath: "/Applications"),
+            URL(fileURLWithPath: "/System/Applications"),
+            homeApplicationsURL
+        ]
+        var appsByID: [String: AppItem] = [:]
+
+        for rootURL in searchRoots where fileManager.fileExists(atPath: rootURL.path) {
+            guard let enumerator = fileManager.enumerator(
+                at: rootURL,
+                includingPropertiesForKeys: [.isApplicationKey, .localizedNameKey],
+                options: [.skipsHiddenFiles, .skipsPackageDescendants]
+            ) else {
+                continue
+            }
+
+            for case let appURL as URL in enumerator where appURL.pathExtension == "app" {
+                enumerator.skipDescendants()
+
+                guard let appItem = installedAppItem(at: appURL) else {
+                    continue
+                }
+
+                appsByID[appItem.id] = appItem
+            }
+        }
+
+        let apps = appsByID.values.sorted { lhs, rhs in
+            lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
+        Self.installedAppCache = apps
+        return apps
+    }
+
+    private func installedAppItem(at appURL: URL) -> AppItem? {
+        guard let bundle = Bundle(url: appURL) else {
+            return nil
+        }
+
+        let displayName = (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+            ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
+            ?? appURL.deletingPathExtension().lastPathComponent
+        let trimmedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !trimmedName.isEmpty, trimmedName != "Window Arranger" else {
+            return nil
+        }
+
+        return AppItem(
+            id: bundle.bundleIdentifier ?? appURL.path,
+            name: trimmedName,
+            bundleIdentifier: bundle.bundleIdentifier,
+            bundleURL: appURL,
+            isRunning: false
         )
     }
 
@@ -319,33 +405,32 @@ struct WindowManagementService {
         return "Failed: Could not split the selected windows.\n\n" + messages.joined(separator: "\n")
     }
 
-    func executeResize(appName: String, dimensions: (width: Int, height: Int), resizeAllWindows: Bool) -> String {
+    func executeResize(app: AppItem, dimensions: (width: Int, height: Int), resizeAllWindows: Bool) -> String {
         guard AXIsProcessTrusted() else {
             return "Error: Accessibility access is required before resizing windows."
         }
 
-        guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.localizedName == appName }) else {
-            return "Error: \(appName) is not running."
+        guard let runningApp = runningApplication(for: app) ?? launchApplication(for: app) else {
+            return "Error: Could not open \(app.name)."
         }
 
-        activate(app)
-        Thread.sleep(forTimeInterval: 0.2)
+        activate(runningApp)
 
-        let targetWindows = resizableWindowElements(
-            for: app.processIdentifier,
+        let targetWindows = waitForResizableWindowElements(
+            for: runningApp.processIdentifier,
             resizeAllWindows: resizeAllWindows
         )
 
         guard !targetWindows.isEmpty else {
-            return "Error: Application is running but has no visible windows."
+            return "Error: \(app.name) is running but has no visible windows."
         }
 
         let result = resizeWindowElements(targetWindows, dimensions: dimensions)
 
-        activate(app)
+        activate(runningApp)
 
         if result.messages.isEmpty {
-            return "Resized \(result.successCount) window(s) of \(appName) to \(dimensions.width)x\(dimensions.height)."
+            return "Resized \(result.successCount) window(s) of \(app.name) to \(dimensions.width)x\(dimensions.height)."
         }
 
         if result.successCount > 0 {
@@ -362,7 +447,11 @@ struct WindowManagementService {
 
         if resizeAllWindows {
             return executeResize(
-                appName: window.appName,
+                app: AppItem(
+                    id: window.bundleIdentifier ?? window.appName,
+                    name: window.appName,
+                    bundleIdentifier: window.bundleIdentifier
+                ),
                 dimensions: dimensions,
                 resizeAllWindows: true
             )
@@ -444,7 +533,7 @@ struct WindowManagementService {
                     return "Could not find \(slot.appName) on this Mac."
                 }
 
-                if let openError = openApplication(at: appURL) {
+                if let openError = openApplication(at: appURL).errorMessage {
                     return "Could not open \(slot.appName): \(openError)"
                 }
             }
@@ -465,24 +554,27 @@ struct WindowManagementService {
         return nil
     }
 
-    private func openApplication(at appURL: URL) -> String? {
+    private func openApplication(at appURL: URL) -> (application: NSRunningApplication?, errorMessage: String?) {
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = true
 
         let semaphore = DispatchSemaphore(value: 0)
+        var launchedApplication: NSRunningApplication?
         var launchError: Error?
 
-        NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { _, error in
+        NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { application, error in
+            launchedApplication = application
             launchError = error
             semaphore.signal()
         }
 
         if semaphore.wait(timeout: .now() + 8) == .timedOut {
-            return "Launch timed out."
+            return (nil, "Launch timed out.")
         }
 
-        return launchError?.localizedDescription
+        return (launchedApplication, launchError?.localizedDescription)
     }
+
     private func activateApplication(for slot: SavedLayoutSlot) {
         if let bundleIdentifier = slot.bundleIdentifier, !bundleIdentifier.isEmpty {
             if let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).first {
@@ -594,6 +686,71 @@ struct WindowManagementService {
         }
 
         return caseInsensitiveMatch ?? candidates.first
+    }
+
+    private func runningApplication(for app: AppItem) -> NSRunningApplication? {
+        if let bundleIdentifier = app.bundleIdentifier, !bundleIdentifier.isEmpty {
+            return NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).first
+        }
+
+        if let bundleURL = app.bundleURL {
+            return NSWorkspace.shared.runningApplications.first { runningApp in
+                runningApp.bundleURL == bundleURL
+            }
+        }
+
+        return NSWorkspace.shared.runningApplications.first { runningApp in
+            runningApp.localizedName == app.name
+        }
+    }
+
+    private func launchApplication(for app: AppItem) -> NSRunningApplication? {
+        let appURL: URL?
+
+        if let bundleURL = app.bundleURL {
+            appURL = bundleURL
+        } else if let bundleIdentifier = app.bundleIdentifier, !bundleIdentifier.isEmpty {
+            appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier)
+        } else {
+            appURL = nil
+        }
+
+        guard let appURL else {
+            return nil
+        }
+
+        let result = openApplication(at: appURL)
+
+        if let application = result.application {
+            return application
+        }
+
+        Thread.sleep(forTimeInterval: 0.4)
+        return runningApplication(for: app)
+    }
+
+    private func waitForResizableWindowElements(
+        for processIdentifier: pid_t,
+        resizeAllWindows: Bool,
+        timeout: TimeInterval = 8
+    ) -> [AXUIElement] {
+        let deadline = Date().addingTimeInterval(timeout)
+        var windows: [AXUIElement] = []
+
+        repeat {
+            windows = resizableWindowElements(
+                for: processIdentifier,
+                resizeAllWindows: resizeAllWindows
+            )
+
+            if !windows.isEmpty {
+                return windows
+            }
+
+            Thread.sleep(forTimeInterval: 0.25)
+        } while Date() < deadline
+
+        return windows
     }
 
     private func resizableWindowElements(for processIdentifier: pid_t, resizeAllWindows: Bool) -> [AXUIElement] {

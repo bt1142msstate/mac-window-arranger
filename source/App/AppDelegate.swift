@@ -12,14 +12,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var fallbackMainWindow: NSWindow?
     private var lastExpandedMainWindowFrame: NSRect?
     private var isApplyingCompactLayout = false
+    private var hasHandledAutomationURL = false
 
     override init() {
         super.init()
         Self.shared = self
     }
 
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        NSAppleEventManager.shared().setEventHandler(
+            self,
+            andSelector: #selector(handleGetURLEvent(_:withReplyEvent:)),
+            forEventClass: AEEventClass(kInternetEventClass),
+            andEventID: AEEventID(kAEGetURL)
+        )
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         showLaunchMiniMode()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        NSAppleEventManager.shared().removeEventHandler(
+            forEventClass: AEEventClass(kInternetEventClass),
+            andEventID: AEEventID(kAEGetURL)
+        )
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -34,6 +51,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func bringMainWindowForward() {
         DispatchQueue.main.async {
+            guard let window = self.configureMainWindowIfNeeded(centerIfNeeded: false) else {
+                return
+            }
+
+            window.alphaValue = 1
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
+            window.orderFrontRegardless()
+        }
+    }
+
+    func showExpandedWindow() {
+        DispatchQueue.main.async {
+            self.transitionCoordinator.cancelActiveTransition()
+            self.compactPanelController.hide()
+
             guard let window = self.configureMainWindowIfNeeded(centerIfNeeded: false) else {
                 return
             }
@@ -109,6 +142,146 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    @objc private func handleGetURLEvent(
+        _ event: NSAppleEventDescriptor,
+        withReplyEvent replyEvent: NSAppleEventDescriptor
+    ) {
+        guard
+            let urlString = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue,
+            let url = URL(string: urlString)
+        else {
+            showCompactStatus(message: "Invalid automation URL.", kind: .error)
+            return
+        }
+
+        hasHandledAutomationURL = true
+        handleAutomationURL(url)
+    }
+
+    private func handleAutomationURL(_ url: URL) {
+        guard url.scheme == "window-arranger" else {
+            showCompactStatus(message: "Unsupported automation URL.", kind: .error)
+            return
+        }
+
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let action = automationAction(from: url)
+
+        switch action {
+        case "show", "open":
+            showExpandedWindow()
+        case "mini", "compact":
+            showCompactStatus(message: "Ready to arrange windows.", kind: .neutral)
+        case "apply-layout", "layout", "open-layout":
+            applyAutomationLayout(components: components, url: url)
+        case "resize":
+            performAutomationResize(components: components)
+        case "accessibility", "settings":
+            compactLayoutService.openAccessibilitySettings()
+        default:
+            showCompactStatus(message: "Unknown automation action: \(action).", kind: .error)
+        }
+    }
+
+    private func automationAction(from url: URL) -> String {
+        let host = url.host(percentEncoded: false) ?? ""
+        let firstPathComponent = url.pathComponents.first { $0 != "/" } ?? ""
+        let rawAction = host.isEmpty ? firstPathComponent : host
+        return rawAction.trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
+    }
+
+    private func applyAutomationLayout(components: URLComponents?, url: URL) {
+        let layoutID = queryValue("id", in: components)
+        let layoutName = queryValue("name", in: components)
+            ?? queryValue("layout", in: components)
+            ?? layoutNameFromPath(url)
+
+        if let layoutID, !layoutID.isEmpty {
+            applyCompactLayout(id: layoutID)
+            return
+        }
+
+        guard let layoutName, !layoutName.isEmpty else {
+            showCompactStatus(message: "Add a layout name or id to the automation URL.", kind: .error)
+            return
+        }
+
+        applyCompactLayout(named: layoutName)
+    }
+
+    private func layoutNameFromPath(_ url: URL) -> String? {
+        let pathComponents = url.pathComponents.filter { $0 != "/" }
+        let host = url.host(percentEncoded: false) ?? ""
+        let nameComponents = host.isEmpty ? pathComponents.dropFirst() : pathComponents[...]
+
+        guard !nameComponents.isEmpty else {
+            return nil
+        }
+
+        return nameComponents.joined(separator: "/").removingPercentEncoding
+    }
+
+    private func performAutomationResize(components: URLComponents?) {
+        guard
+            let widthText = queryValue("width", in: components),
+            let heightText = queryValue("height", in: components),
+            let width = Int(widthText),
+            let height = Int(heightText),
+            (100...10000).contains(width),
+            (100...10000).contains(height)
+        else {
+            showCompactStatus(message: "Resize automation needs width and height.", kind: .error)
+            return
+        }
+
+        let requestedName = queryValue("app", in: components) ?? queryValue("name", in: components)
+        let requestedBundleID = queryValue("bundle", in: components) ?? queryValue("bundleIdentifier", in: components)
+        let resizeAllWindows = boolQueryValue("all", in: components)
+            || boolQueryValue("resizeAllWindows", in: components)
+        let availableApps = compactLayoutService.loadRunningApps()
+
+        guard let app = availableApps.first(where: { candidate in
+            if let requestedBundleID, !requestedBundleID.isEmpty {
+                return candidate.bundleIdentifier == requestedBundleID
+            }
+
+            if let requestedName, !requestedName.isEmpty {
+                return candidate.name.localizedCaseInsensitiveCompare(requestedName) == .orderedSame
+            }
+
+            return false
+        }) else {
+            showCompactStatus(message: "Could not find the requested app.", kind: .error)
+            return
+        }
+
+        showCompactStatus(message: "Resizing \(app.name)...", kind: .neutral)
+
+        DispatchQueue.global(qos: .userInitiated).async { [compactLayoutService] in
+            let resultMessage = compactLayoutService.executeResize(
+                app: app,
+                dimensions: (width: width, height: height),
+                resizeAllWindows: resizeAllWindows
+            )
+
+            DispatchQueue.main.async {
+                self.showCompactStatus(message: resultMessage, kind: self.statusKind(for: resultMessage))
+            }
+        }
+    }
+
+    private func queryValue(_ name: String, in components: URLComponents?) -> String? {
+        components?.queryItems?.first { $0.name == name }?.value?.removingPercentEncoding
+    }
+
+    private func boolQueryValue(_ name: String, in components: URLComponents?) -> Bool {
+        guard let value = queryValue(name, in: components)?.lowercased() else {
+            return false
+        }
+
+        return ["1", "true", "yes", "on"].contains(value)
+    }
+
     private func restoreMainWindow() {
         guard let window = configureMainWindowIfNeeded(centerIfNeeded: false) else {
             return
@@ -139,6 +312,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showLaunchMiniMode(attempt: Int = 0) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            guard !self.hasHandledAutomationURL else {
+                return
+            }
+
             let didShow = self.showCompactStatusIfPossible(
                 message: "Ready to arrange windows.",
                 kind: .neutral,
@@ -241,6 +418,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        applyCompactLayout(layout)
+    }
+
+    private func applyCompactLayout(named layoutName: String) {
+        guard !isApplyingCompactLayout else {
+            return
+        }
+
+        let layouts = LayoutPersistence.loadSavedLayouts()
+
+        guard let layout = layouts.first(where: {
+            $0.name.localizedCaseInsensitiveCompare(layoutName) == .orderedSame
+        }) else {
+            LayoutPersistence.selectedLayoutID = ""
+            showCompactStatus(message: "Saved layout \"\(layoutName)\" could not be found.", kind: .error)
+            return
+        }
+
+        applyCompactLayout(layout)
+    }
+
+    private func applyCompactLayout(_ layout: SavedLayout) {
         let frames = compactLayoutService.frames(for: layout)
 
         guard frames.count == layout.slots.count else {

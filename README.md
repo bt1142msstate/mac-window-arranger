@@ -17,13 +17,15 @@ Mac Window Arranger is a small native macOS SwiftUI utility for resizing and arr
 ## Features
 
 - Resize the frontmost window or every standard window for a selected app.
-- Pick the resize target from a menu, or use Pick Window to outline a hovered window and resize it on click.
+- Search running and installed apps from the resize target picker; installed apps launch before resizing.
+- Pick the resize target from the app picker, or use Pick Window to outline a hovered window and resize it on click.
 - Use presets for common sizes like 1080p, 720p, mobile, tablet, and square.
 - Arrange selected windows into two-column, three-column, four-grid, and focus-stack layouts.
 - Save custom layouts and reopen the matching apps later with Open & Arrange.
 - Keep Resize and Arrange modes separate so each workflow stays compact.
 - Restore minimized saved-layout windows before arranging them.
 - Start in Mini Mode, switch saved layouts from the compact control, and return to a small Dock-adjacent control after successful actions.
+- Call the app from Shortcuts, scripts, launchers, or other macOS apps with the `window-arranger://` URL scheme.
 - Preserve local Accessibility permission across rebuilds with stable signing metadata.
 
 ## Current Status
@@ -54,6 +56,12 @@ The app follows a small native macOS SwiftUI structure:
 
 On first use, grant Accessibility permission in System Settings so the app can read, move, unminimize, and resize windows owned by other apps.
 
+## Install
+
+GitHub checkouts include a ready-made drag-to-Applications disk image at [`dist/Window Arranger.dmg`](dist/Window%20Arranger.dmg). Open the DMG, drag `Window Arranger.app` into `/Applications`, then grant Accessibility permission on first launch.
+
+The bundled DMG is signed for local validation. Public direct-download releases should be rebuilt with a Developer ID Application certificate and notarized before distribution.
+
 ## App Icon
 
 <p>
@@ -81,13 +89,28 @@ Useful modes:
 - `./script/build_and_run.sh --logs`: launch and stream process logs.
 - `./script/build_and_run.sh --telemetry`: launch and stream app-subsystem logs.
 
+## Automation
+
+Other apps, Shortcuts, launchers, and shell scripts can call Window Arranger through its custom URL scheme:
+
+```sh
+open "window-arranger://show"
+open "window-arranger://mini"
+open "window-arranger://apply-layout?name=Work%20Layout"
+open "window-arranger://apply-layout?id=LAYOUT-UUID"
+open "window-arranger://resize?app=Safari&width=1280&height=720"
+open "window-arranger://resize?bundle=com.apple.Safari&width=1440&height=900&all=1"
+```
+
+URL calls are one-way macOS launch events, so status appears in Window Arranger or Mini Mode instead of stdout. Layout and resize actions still require Accessibility permission.
+
 ## DMG Installer
 
 ```sh
 ./script/build_and_run.sh --dmg
 ```
 
-This creates `dist/Window Arranger.dmg`, a read-only compressed disk image with `Window Arranger.app` and an `Applications` shortcut so users can drag the app into `/Applications`.
+This creates or refreshes `dist/Window Arranger.dmg`, a read-only compressed disk image with `Window Arranger.app` and an `Applications` shortcut so users can drag the app into `/Applications`.
 
 Local DMGs are signed with the stable local signing identity so they validate on this Mac. Public direct-download releases should be rebuilt with a Developer ID Application certificate and notarized before distribution.
 

@@ -6,6 +6,26 @@ struct AppItem: Identifiable, Hashable {
     let id: String
     let name: String
     let bundleIdentifier: String?
+    let bundleURL: URL?
+    let isRunning: Bool
+
+    init(
+        id: String,
+        name: String,
+        bundleIdentifier: String?,
+        bundleURL: URL? = nil,
+        isRunning: Bool = true
+    ) {
+        self.id = id
+        self.name = name
+        self.bundleIdentifier = bundleIdentifier
+        self.bundleURL = bundleURL
+        self.isRunning = isRunning
+    }
+
+    var statusLabel: String {
+        isRunning ? "Running" : "Installed"
+    }
 }
 
 struct WindowItem: Identifiable, Hashable {

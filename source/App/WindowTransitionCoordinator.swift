@@ -7,6 +7,13 @@ final class WindowTransitionCoordinator {
     private let revealFadeDuration: TimeInterval = 0.08
     private var activePanel: NSPanel?
 
+    func cancelActiveTransition() {
+        activePanel?.alphaValue = 0
+        activePanel?.orderOut(nil)
+        activePanel?.close()
+        activePanel = nil
+    }
+
     func transition(
         from sourceWindow: NSWindow?,
         sourceFrame: NSRect,

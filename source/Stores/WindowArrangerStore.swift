@@ -77,8 +77,12 @@ final class WindowArrangerStore {
         return "\(dimensions.width) x \(dimensions.height)"
     }
 
+    var selectedApp: AppItem? {
+        runningApps.first { $0.name == selectedAppName }
+    }
+
     var canResize: Bool {
-        !selectedAppName.isEmpty
+        selectedApp != nil
             && targetDimensions != nil
             && hasAccessibilityAccess
             && !isExecuting
@@ -568,16 +572,21 @@ final class WindowArrangerStore {
             return
         }
 
-        let appName = selectedAppName
+        guard let app = selectedApp else {
+            resultKind = .error
+            executionResult = "Choose an app before resizing."
+            return
+        }
+
         let shouldResizeAllWindows = resizeAllWindows
 
         isExecuting = true
         resultKind = .neutral
-        executionResult = "Preparing \(selectedAppName)..."
+        executionResult = "Preparing \(app.name)..."
 
         DispatchQueue.global(qos: .userInitiated).async { [service] in
             let resultMessage = service.executeResize(
-                appName: appName,
+                app: app,
                 dimensions: dimensions,
                 resizeAllWindows: shouldResizeAllWindows
             )

@@ -1,5 +1,7 @@
 build/
-dist/
+dist/*
+!dist/
+!dist/Window Arranger.dmg
 backups/
 .codesign/
 .DS_Store
