@@ -77,8 +77,19 @@ Use `--verify` to build, install, launch, and confirm the app starts:
 Useful modes:
 
 - `./script/build_and_run.sh --install`: build, install, and launch the app.
+- `./script/build_and_run.sh --dmg`: build a signed drag-to-Applications DMG at `dist/Window Arranger.dmg`.
 - `./script/build_and_run.sh --logs`: launch and stream process logs.
 - `./script/build_and_run.sh --telemetry`: launch and stream app-subsystem logs.
+
+## DMG Installer
+
+```sh
+./script/build_and_run.sh --dmg
+```
+
+This creates `dist/Window Arranger.dmg`, a read-only compressed disk image with `Window Arranger.app` and an `Applications` shortcut so users can drag the app into `/Applications`.
+
+Local DMGs are signed with the stable local signing identity so they validate on this Mac. Public direct-download releases should be rebuilt with a Developer ID Application certificate and notarized before distribution.
 
 ## Privacy
 
