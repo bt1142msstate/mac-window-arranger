@@ -105,19 +105,12 @@ private struct WorkflowModePicker: View {
                     return
                 }
 
-                let currentSize = store.workflowMode.contentSize
-                let newSize = newMode.contentSize
-                if newSize.height < currentSize.height || newSize.width < currentSize.width {
-                    store.workflowMode = newMode
-                    DispatchQueue.main.async {
-                        AppDelegate.shared?.fitMainWindowToContentSize(newSize)
+                AppDelegate.shared?.fitMainWindowToContentSize(
+                    newMode.contentSize,
+                    prepareContent: {
+                        store.workflowMode = newMode
                     }
-                    return
-                }
-
-                AppDelegate.shared?.fitMainWindowToContentSize(newMode.contentSize) {
-                    store.workflowMode = newMode
-                }
+                )
             }
         )
     }
