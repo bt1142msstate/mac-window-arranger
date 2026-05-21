@@ -19,6 +19,10 @@ final class CompactPanelController {
         panel?.frame
     }
 
+    var currentWindow: NSWindow? {
+        panel
+    }
+
     func owns(_ window: NSWindow) -> Bool {
         panel === window
     }
@@ -32,6 +36,7 @@ final class CompactPanelController {
     ) {
         let panel = panel ?? makePanel()
         self.panel = panel
+        panel.alphaValue = 1
 
         panel.contentView = NSHostingView(
             rootView: CompactArrangerPanelView(
@@ -64,7 +69,7 @@ final class CompactPanelController {
         panel.hasShadow = true
         panel.isMovableByWindowBackground = true
         panel.level = .floating
-        panel.animationBehavior = .utilityWindow
+        panel.animationBehavior = .none
         panel.collectionBehavior = [
             .canJoinAllSpaces,
             .fullScreenAuxiliary,

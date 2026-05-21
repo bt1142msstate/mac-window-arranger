@@ -28,7 +28,7 @@ Accessibility APIs to inspect, unminimize, move, and resize windows owned by
 other apps. Local testing showed:
 
 - Unsandboxed hardened-runtime build: `Work Layout` opens and arranges
-  minimized YouTube, ChatGPT Atlas, and Codex windows successfully.
+  minimized browser, notes, and editor windows successfully.
 - Sandboxed build: the app reports that it cannot find any layout windows.
 - Sandboxed build plus a temporary `com.apple.axserver` Mach lookup exception:
   still cannot find the layout windows.
