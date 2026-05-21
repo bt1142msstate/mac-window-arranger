@@ -3,3 +3,4 @@ dist/
 backups/
 .codesign/
 .DS_Store
+/Icon?

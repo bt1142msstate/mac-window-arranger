@@ -28,11 +28,15 @@
 	<string>7</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
-	<key>NSAppleEventsUsageDescription</key>
-	<string>Window Arranger uses Apple Events to activate the selected app before arranging its windows.</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.utilities</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright © 2026 Mac Window Arranger contributors. All rights reserved.</string>
 	<key>NSAccessibilityUsageDescription</key>
 	<string>Window Arranger needs Accessibility access to move, resize, and arrange windows from other apps.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

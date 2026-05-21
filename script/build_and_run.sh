@@ -29,6 +29,8 @@ APP_CONTENTS="$APP_BUNDLE/Contents"
 APP_MACOS="$APP_CONTENTS/MacOS"
 APP_RESOURCES="$APP_CONTENTS/Resources"
 APP_BINARY="$APP_MACOS/$APP_NAME"
+ENTITLEMENTS_FILE="$ROOT_DIR/source/WindowArranger.entitlements"
+SWIFT_TARGETS="${WINDOW_ARRANGER_SWIFT_TARGETS:-arm64-apple-macos14.0 x86_64-apple-macos14.0}"
 INSTALL_PATH="/Applications/$APP_NAME.app"
 LEGACY_INSTALL_PATH="/Applications/$LEGACY_APP_NAME.app"
 INSTALL_BINARY="$INSTALL_PATH/Contents/MacOS/$APP_NAME"
@@ -156,7 +158,13 @@ sign_bundle() {
   find "$APP_BUNDLE" -name ".DS_Store" -delete
   find "$APP_BUNDLE" -name "._*" -delete
   xattr -cr "$APP_BUNDLE"
-  codesign --force --deep --sign "$SIGNING_IDENTITY" "$APP_BUNDLE" >/dev/null
+  codesign \
+    --force \
+    --deep \
+    --options runtime \
+    --entitlements "$ENTITLEMENTS_FILE" \
+    --sign "$SIGNING_IDENTITY" \
+    "$APP_BUNDLE" >/dev/null
 }
 
 designated_requirement() {
@@ -220,18 +228,43 @@ build_bundle() {
   mkdir -p "$BUILD_DIR" "$STAGING_DIR"
   build_icon
 
-  xcrun swiftc -parse-as-library \
-    "$ROOT_DIR/source/main.swift" \
-    -o "$BUILD_DIR/$APP_NAME" \
-    -framework SwiftUI \
-    -framework AppKit \
-    -framework ApplicationServices
+  local swift_sources=()
+  local swift_source
+
+  while IFS= read -r swift_source; do
+    swift_sources+=("$swift_source")
+  done < <(find "$ROOT_DIR/source" -name "*.swift" -print | sort)
+
+  local built_binaries=()
+  local swift_target
+
+  for swift_target in $SWIFT_TARGETS; do
+    local arch_name="${swift_target%%-*}"
+    local target_binary="$BUILD_DIR/$APP_NAME-$arch_name"
+
+    xcrun swiftc -parse-as-library \
+      -target "$swift_target" \
+      "${swift_sources[@]}" \
+      -o "$target_binary" \
+      -framework SwiftUI \
+      -framework AppKit \
+      -framework ApplicationServices
+
+    built_binaries+=("$target_binary")
+  done
+
+  if [[ "${#built_binaries[@]}" -eq 1 ]]; then
+    cp -X "${built_binaries[0]}" "$BUILD_DIR/$APP_NAME"
+  else
+    lipo -create "${built_binaries[@]}" -output "$BUILD_DIR/$APP_NAME"
+  fi
 
   rm -rf "$APP_BUNDLE"
   mkdir -p "$APP_MACOS" "$APP_RESOURCES"
   cp -X "$BUILD_DIR/$APP_NAME" "$APP_BINARY"
   cp -X "$ROOT_DIR/source/Info.plist" "$APP_CONTENTS/Info.plist"
   cp -X "$ICON_DIR/WindowArrangerIcon.icns" "$APP_RESOURCES/WindowArrangerIcon.icns"
+  cp -X "$ROOT_DIR/source/Resources/PrivacyInfo.xcprivacy" "$APP_RESOURCES/PrivacyInfo.xcprivacy"
   printf "APPL????" > "$APP_CONTENTS/PkgInfo"
   chmod +x "$APP_BINARY"
   sign_bundle
@@ -312,8 +345,16 @@ case "$MODE" in
     ;;
   --verify|verify)
     open_app
-    sleep 1
-    pgrep -x "$APP_NAME" >/dev/null
+    for _ in {1..20}; do
+      if pgrep -x "$APP_NAME" >/dev/null; then
+        exit 0
+      fi
+
+      sleep 0.25
+    done
+
+    echo "$APP_NAME did not start within 5 seconds." >&2
+    exit 1
     ;;
   --install|install)
     open_app
