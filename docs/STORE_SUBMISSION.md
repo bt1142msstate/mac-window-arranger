@@ -53,6 +53,8 @@ Apple references:
   provisioning profile. The local certificate intentionally is not accepted by
   Gatekeeper.
 - Notarize the Developer ID build.
+- Rebuild the DMG with the Developer ID-signed app, sign the DMG, notarize it,
+  staple the notarization ticket, and verify Gatekeeper acceptance.
 - Provide the Privacy Policy as a public URL. The included `docs/PRIVACY.md` is
   the draft content.
 - Fill privacy disclosures: no tracking, no analytics, no network collection;
@@ -66,8 +68,11 @@ Run:
 
 ```sh
 ./script/build_and_run.sh --verify
+./script/build_and_run.sh --dmg
 codesign -dvvv --entitlements :- "/Applications/Window Arranger.app"
 codesign --verify --deep --strict --verbose=2 "/Applications/Window Arranger.app"
+codesign --verify --verbose=2 "dist/Window Arranger.dmg"
+hdiutil verify "dist/Window Arranger.dmg"
 plutil -p "/Applications/Window Arranger.app/Contents/Resources/PrivacyInfo.xcprivacy"
 lipo -archs "/Applications/Window Arranger.app/Contents/MacOS/Window Arranger"
 ```
@@ -75,6 +80,8 @@ lipo -archs "/Applications/Window Arranger.app/Contents/MacOS/Window Arranger"
 Expected local result:
 
 - Code signature verifies on disk.
+- `dist/Window Arranger.dmg` exists and contains `Window Arranger.app` plus an
+  `Applications` shortcut for drag-to-install.
 - Entitlements do not include App Sandbox.
 - CodeDirectory flags include hardened runtime.
 - Privacy manifest is bundled.

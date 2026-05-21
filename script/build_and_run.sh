@@ -22,13 +22,17 @@ LEGACY_BUNDLE_ID="com.custom.WindowResizer"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="$ROOT_DIR/build"
 STAGING_DIR="${TMPDIR:-/tmp}/window-arranger-build/staging"
+DMG_WORK_DIR="${TMPDIR:-/tmp}/window-arranger-build/dmg"
 LEGACY_DIST_DIR="$ROOT_DIR/dist"
+DIST_DIR="$ROOT_DIR/dist"
 ICON_DIR="$BUILD_DIR/window-arranger-icon"
 APP_BUNDLE="$STAGING_DIR/$APP_NAME.app"
 APP_CONTENTS="$APP_BUNDLE/Contents"
 APP_MACOS="$APP_CONTENTS/MacOS"
 APP_RESOURCES="$APP_CONTENTS/Resources"
 APP_BINARY="$APP_MACOS/$APP_NAME"
+DMG_PATH="$DIST_DIR/$APP_NAME.dmg"
+DMG_VOLUME_NAME="$APP_NAME"
 ENTITLEMENTS_FILE="$ROOT_DIR/source/WindowArranger.entitlements"
 SWIFT_TARGETS="${WINDOW_ARRANGER_SWIFT_TARGETS:-arm64-apple-macos14.0 x86_64-apple-macos14.0}"
 INSTALL_PATH="/Applications/$APP_NAME.app"
@@ -45,7 +49,7 @@ SIGNING_P12_PASSWORD="${WINDOW_ARRANGER_SIGNING_P12_PASSWORD:-window-arranger-lo
 DESIGNATED_REQUIREMENT_FILE="$ROOT_DIR/script/window-arranger-designated-requirement.txt"
 
 usage() {
-  echo "usage: $0 [run|--debug|--logs|--telemetry|--verify|--install]" >&2
+  echo "usage: $0 [run|--debug|--logs|--telemetry|--verify|--install|--dmg]" >&2
   exit 2
 }
 
@@ -61,6 +65,7 @@ cleanup_duplicate_build_artifacts() {
     "$BUILD_DIR/staging/$APP_NAME.app" \
     "$BUILD_DIR/staging/$LEGACY_APP_NAME.app" \
     "$STAGING_DIR" \
+    "$DMG_WORK_DIR" \
     "${TMPDIR:-/tmp}/window-resizer-build/staging"
 }
 
@@ -320,30 +325,96 @@ verify_no_duplicate_app_bundles() {
   fi
 }
 
+create_dmg() {
+  local dmg_root="$DMG_WORK_DIR/root"
+  local mounted_dmg_path="$DMG_WORK_DIR/$APP_NAME.dmg"
+
+  rm -rf "$DMG_WORK_DIR"
+  mkdir -p "$dmg_root" "$DIST_DIR"
+
+  ditto "$APP_BUNDLE" "$dmg_root/$APP_NAME.app"
+  ln -s /Applications "$dmg_root/Applications"
+  xattr -cr "$dmg_root"
+
+  rm -f "$DMG_PATH" "$mounted_dmg_path"
+  hdiutil create \
+    -volname "$DMG_VOLUME_NAME" \
+    -srcfolder "$dmg_root" \
+    -format UDZO \
+    -ov \
+    "$mounted_dmg_path" >/dev/null
+
+  codesign --force --sign "$SIGNING_IDENTITY" "$mounted_dmg_path" >/dev/null
+  ditto "$mounted_dmg_path" "$DMG_PATH"
+  xattr -cr "$DMG_PATH"
+  rm -rf "$DMG_WORK_DIR"
+}
+
+verify_dmg() {
+  local mount_point="$DMG_WORK_DIR/mount"
+
+  mkdir -p "$mount_point"
+  hdiutil verify "$DMG_PATH" >/dev/null
+  codesign --verify --verbose=2 "$DMG_PATH" >/dev/null
+  hdiutil attach "$DMG_PATH" -readonly -nobrowse -mountpoint "$mount_point" >/dev/null
+
+  local detach_needed=1
+  cleanup_mount() {
+    if [[ "$detach_needed" == "1" ]]; then
+      hdiutil detach "$mount_point" -quiet >/dev/null 2>&1 || true
+    fi
+    rm -rf "$DMG_WORK_DIR"
+  }
+  trap cleanup_mount RETURN
+
+  test -d "$mount_point/$APP_NAME.app"
+  test -L "$mount_point/Applications"
+  codesign --verify --deep --strict "$mount_point/$APP_NAME.app"
+  lipo -archs "$mount_point/$APP_NAME.app/Contents/MacOS/$APP_NAME" >/dev/null
+
+  hdiutil detach "$mount_point" -quiet >/dev/null
+  detach_needed=0
+  rm -rf "$DMG_WORK_DIR"
+  trap - RETURN
+}
+
+install_built_app() {
+  kill_running_app
+  install_app
+  verify_installed_app
+  verify_no_duplicate_app_bundles
+}
+
 cleanup_duplicate_build_artifacts
 build_bundle
 verify_designated_requirement_stability
-kill_running_app
-install_app
-verify_installed_app
-verify_no_duplicate_app_bundles
 
 case "$MODE" in
+  --dmg|dmg|--package|package)
+    create_dmg
+    verify_dmg
+    printf '%s\n' "$DMG_PATH"
+    ;;
   run)
+    install_built_app
     open_app
     ;;
   --debug|debug)
+    install_built_app
     lldb -- "$INSTALL_BINARY"
     ;;
   --logs|logs)
+    install_built_app
     open_app
     /usr/bin/log stream --info --style compact --predicate "process == \"$APP_NAME\""
     ;;
   --telemetry|telemetry)
+    install_built_app
     open_app
     /usr/bin/log stream --info --style compact --predicate "subsystem == \"$BUNDLE_ID\""
     ;;
   --verify|verify)
+    install_built_app
     open_app
     for _ in {1..20}; do
       if pgrep -x "$APP_NAME" >/dev/null; then
@@ -357,6 +428,7 @@ case "$MODE" in
     exit 1
     ;;
   --install|install)
+    install_built_app
     open_app
     ;;
   *)
