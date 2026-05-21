@@ -87,6 +87,28 @@ final class WindowArrangerStore {
         }
     }
 
+    var layoutPreviewPanes: [LayoutPreviewPane] {
+        let selectedIDs = normalizedSelectionIDs(selectedSplitWindowIDs)
+        let fallbackFrames = selectedLayoutKind.previewFrames(slotCount: layoutSlotCount)
+        let visibleFrame = selectedLayoutKind.usesStoredFrames ? service.currentVisibleWindowManagementFrame() : nil
+
+        return (0..<layoutSlotCount).map { index in
+            let selectedID = selectedIDs[safe: index] ?? ""
+            let window = availableWindows.first { $0.id == selectedID }
+            let fallbackFrame = fallbackFrames[safe: index] ?? CGRect(x: 0, y: 0, width: 1, height: 1)
+            let frame = previewFrame(for: window, visibleFrame: visibleFrame) ?? fallbackFrame
+
+            return LayoutPreviewPane(
+                position: index,
+                slotTitle: splitSlotTitle(for: index),
+                selectedWindowID: selectedID.isEmpty ? nil : selectedID,
+                appName: window?.appName,
+                windowTitle: window?.title,
+                frame: frame
+            )
+        }
+    }
+
     var layoutSlotCount: Int {
         selectedLayoutKind.fixedWindowCount ?? customLayoutWindowCount
     }
@@ -350,14 +372,6 @@ final class WindowArrangerStore {
         selectedLayoutKind.slotTitle(for: index)
     }
 
-    func splitWindowID(at index: Int) -> String {
-        guard selectedSplitWindowIDs.indices.contains(index) else {
-            return ""
-        }
-
-        return selectedSplitWindowIDs[index]
-    }
-
     func setSplitWindowSelection(_ selectedID: String, at index: Int) {
         selectedSplitWindowIDs = normalizedSelectionIDs(selectedSplitWindowIDs)
 
@@ -374,6 +388,19 @@ final class WindowArrangerStore {
         }
 
         return normalized
+    }
+
+    private func previewFrame(for window: WindowItem?, visibleFrame: CGRect?) -> CGRect? {
+        guard
+            selectedLayoutKind.usesStoredFrames,
+            let window,
+            let visibleFrame
+        else {
+            return nil
+        }
+
+        let previewFrame = NormalizedWindowFrame(frame: window.frame, in: visibleFrame).previewFrame
+        return previewFrame.width >= 0.06 && previewFrame.height >= 0.06 ? previewFrame : nil
     }
 
     func loadAvailableWindows(preserveSelection: Bool = true) {

@@ -140,6 +140,109 @@ enum LayoutKind: String, CaseIterable, Identifiable, Codable {
             return "Window \(index + 1)"
         }
     }
+
+    func previewFrames(slotCount: Int) -> [CGRect] {
+        let count = max(slotCount, 1)
+
+        switch self {
+        case .twoColumns:
+            return Self.columnPreviewFrames(count: 2)
+        case .threeColumns:
+            return Self.columnPreviewFrames(count: 3)
+        case .fourGrid:
+            return [
+                CGRect(x: 0, y: 0, width: 0.5, height: 0.5),
+                CGRect(x: 0.5, y: 0, width: 0.5, height: 0.5),
+                CGRect(x: 0, y: 0.5, width: 0.5, height: 0.5),
+                CGRect(x: 0.5, y: 0.5, width: 0.5, height: 0.5)
+            ]
+        case .focusStack:
+            return [
+                CGRect(x: 0, y: 0, width: 0.62, height: 1),
+                CGRect(x: 0.62, y: 0, width: 0.38, height: 0.5),
+                CGRect(x: 0.62, y: 0.5, width: 0.38, height: 0.5)
+            ]
+        case .customPositions:
+            return Self.adaptivePreviewFrames(count: count)
+        }
+    }
+
+    private static func columnPreviewFrames(count: Int) -> [CGRect] {
+        let safeCount = max(count, 1)
+        let width = 1 / CGFloat(safeCount)
+
+        return (0..<safeCount).map { index in
+            CGRect(x: CGFloat(index) * width, y: 0, width: width, height: 1)
+        }
+    }
+
+    private static func adaptivePreviewFrames(count: Int) -> [CGRect] {
+        switch count {
+        case 1:
+            return [CGRect(x: 0, y: 0, width: 1, height: 1)]
+        case 2:
+            return columnPreviewFrames(count: 2)
+        case 3:
+            return LayoutKind.focusStack.previewFrames(slotCount: 3)
+        case 4:
+            return LayoutKind.fourGrid.previewFrames(slotCount: 4)
+        case 5...6:
+            return gridPreviewFrames(count: count, columns: 3)
+        default:
+            return gridPreviewFrames(count: count, columns: 4)
+        }
+    }
+
+    private static func gridPreviewFrames(count: Int, columns: Int) -> [CGRect] {
+        let safeCount = max(count, 1)
+        let safeColumns = max(columns, 1)
+        let rows = Int(ceil(Double(safeCount) / Double(safeColumns)))
+        let width = 1 / CGFloat(safeColumns)
+        let height = 1 / CGFloat(max(rows, 1))
+
+        return (0..<safeCount).map { index in
+            let column = index % safeColumns
+            let row = index / safeColumns
+
+            return CGRect(
+                x: CGFloat(column) * width,
+                y: CGFloat(row) * height,
+                width: width,
+                height: height
+            )
+        }
+    }
+}
+
+struct LayoutPreviewPane: Identifiable, Hashable {
+    var id: Int { position }
+
+    let position: Int
+    let slotTitle: String
+    let selectedWindowID: String?
+    let appName: String?
+    let windowTitle: String?
+    let frame: CGRect
+
+    var hasWindow: Bool {
+        appName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+
+    var primaryLabel: String {
+        guard let appName, !appName.isEmpty else {
+            return "Choose window"
+        }
+
+        return appName
+    }
+
+    var secondaryLabel: String {
+        guard let windowTitle, !windowTitle.isEmpty else {
+            return slotTitle
+        }
+
+        return windowTitle
+    }
 }
 
 struct NormalizedWindowFrame: Codable, Hashable {
@@ -173,6 +276,16 @@ struct NormalizedWindowFrame: Codable, Hashable {
             height: CGFloat(height) * visibleFrame.height
         ).roundedForWindowManagement()
     }
+
+    var previewFrame: CGRect {
+        CGRect(
+            x: CGFloat(x),
+            y: CGFloat(y),
+            width: CGFloat(width),
+            height: CGFloat(height)
+        )
+        .clampedToUnitFrame()
+    }
 }
 
 struct SavedLayout: Identifiable, Codable, Hashable {
@@ -205,6 +318,26 @@ struct SavedLayout: Identifiable, Codable, Hashable {
         layoutKind = try container.decodeIfPresent(LayoutKind.self, forKey: .layoutKind) ?? .threeColumns
         slots = try container.decode([SavedLayoutSlot].self, forKey: .slots)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+    }
+
+    var previewPanes: [LayoutPreviewPane] {
+        let orderedSlots = slots.sorted { $0.position < $1.position }
+        let fallbackFrames = layoutKind.previewFrames(slotCount: orderedSlots.count)
+
+        return orderedSlots.enumerated().map { offset, slot in
+            let fallbackFrame = fallbackFrames[safe: slot.position] ?? fallbackFrames[safe: offset] ?? CGRect(x: 0, y: 0, width: 1, height: 1)
+            let storedFrame = slot.normalizedFrame?.previewFrame
+            let previewFrame = storedFrame?.isUsablePreviewFrame == true ? storedFrame ?? fallbackFrame : fallbackFrame
+
+            return LayoutPreviewPane(
+                position: slot.position,
+                slotTitle: layoutKind.slotTitle(for: slot.position),
+                selectedWindowID: nil,
+                appName: slot.appName,
+                windowTitle: slot.windowTitle,
+                frame: previewFrame
+            )
+        }
     }
 }
 
@@ -304,4 +437,24 @@ enum ResizeStatusKind {
     case success
     case warning
     case error
+}
+
+private extension CGRect {
+    var isUsablePreviewFrame: Bool {
+        width >= 0.06 && height >= 0.06
+    }
+
+    func clampedToUnitFrame() -> CGRect {
+        let x = min(max(minX, 0), 1)
+        let y = min(max(minY, 0), 1)
+        let maxX = min(max(maxX, 0), 1)
+        let maxY = min(max(maxY, 0), 1)
+
+        return CGRect(
+            x: x,
+            y: y,
+            width: max(maxX - x, 0),
+            height: max(maxY - y, 0)
+        )
+    }
 }

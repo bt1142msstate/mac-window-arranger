@@ -229,11 +229,7 @@ private struct SavedLayoutPreview: View {
                     MetricBadge(text: "\(layout.slots.count) windows")
                 }
 
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(layout.slots.sorted { $0.position < $1.position }) { slot in
-                        SavedSlotPreviewRow(layout: layout, slot: slot)
-                    }
-                }
+                LayoutMockupPreview(panes: layout.previewPanes, height: 112)
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -252,28 +248,138 @@ private struct SavedLayoutPreview: View {
     }
 }
 
-private struct SavedSlotPreviewRow: View {
-    let layout: SavedLayout
-    let slot: SavedLayoutSlot
+private struct LayoutMockupPreview: View {
+    let panes: [LayoutPreviewPane]
+    var windows: [WindowItem] = []
+    var height: CGFloat = 142
+    var isDisabled = false
+    var selectWindow: ((Int, String) -> Void)?
 
     var body: some View {
-        HStack(spacing: 8) {
-            Text(layout.layoutKind.slotTitle(for: slot.position))
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 76, alignment: .leading)
+        GeometryReader { proxy in
+            ZStack(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(Color.secondary.opacity(0.07))
 
-            Text(slot.appName)
-                .font(.caption.weight(.medium))
-                .lineLimit(1)
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .stroke(Color.secondary.opacity(0.12), lineWidth: 1)
 
-            if !slot.windowTitle.isEmpty {
-                Text(slot.windowTitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                ForEach(panes) { pane in
+                    paneContent(for: pane)
+                        .frame(width: previewFrame(for: pane, in: proxy.size).width, height: previewFrame(for: pane, in: proxy.size).height)
+                        .offset(x: previewFrame(for: pane, in: proxy.size).minX, y: previewFrame(for: pane, in: proxy.size).minY)
+                }
             }
         }
+        .frame(height: height)
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private func paneContent(for pane: LayoutPreviewPane) -> some View {
+        if let selectWindow {
+            Menu {
+                if windows.isEmpty {
+                    Label("No windows available", systemImage: "exclamationmark.triangle")
+                } else {
+                    Button {
+                        selectWindow(pane.position, "")
+                    } label: {
+                        Label("Choose window", systemImage: pane.selectedWindowID == nil ? "checkmark.circle.fill" : "circle")
+                    }
+
+                    Divider()
+
+                    ForEach(windows) { window in
+                        let isCurrentSelection = pane.selectedWindowID == window.id
+                        let isUsedElsewhere = panes.contains { otherPane in
+                            otherPane.position != pane.position && otherPane.selectedWindowID == window.id
+                        }
+
+                        Button {
+                            selectWindow(pane.position, window.id)
+                        } label: {
+                            Label(window.displayName, systemImage: isCurrentSelection ? "checkmark.circle.fill" : "macwindow")
+                        }
+                        .disabled(isUsedElsewhere && !isCurrentSelection)
+                    }
+                }
+            } label: {
+                LayoutMockupPaneView(pane: pane, showsMenuIndicator: true)
+            }
+            .buttonStyle(.plain)
+            .disabled(isDisabled)
+            .help("Choose \(pane.slotTitle)")
+        } else {
+            LayoutMockupPaneView(pane: pane)
+        }
+    }
+
+    private func previewFrame(for pane: LayoutPreviewPane, in size: CGSize) -> CGRect {
+        let inset: CGFloat = 7
+        let paneSpacing: CGFloat = 5
+        let availableWidth = max(size.width - (inset * 2), 1)
+        let availableHeight = max(size.height - (inset * 2), 1)
+
+        return CGRect(
+            x: inset + (pane.frame.minX * availableWidth),
+            y: inset + (pane.frame.minY * availableHeight),
+            width: max((pane.frame.width * availableWidth) - paneSpacing, 38),
+            height: max((pane.frame.height * availableHeight) - paneSpacing, 38)
+        )
+    }
+}
+
+private struct LayoutMockupPaneView: View {
+    let pane: LayoutPreviewPane
+    var showsMenuIndicator = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 4) {
+                Text(pane.slotTitle)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+
+                Spacer(minLength: 0)
+
+                Image(systemName: pane.hasWindow ? "checkmark.circle.fill" : "circle.dashed")
+                    .font(.caption2)
+                    .foregroundStyle(pane.hasWindow ? .blue : .secondary)
+                    .accessibilityHidden(true)
+
+                if showsMenuIndicator {
+                    Image(systemName: "chevron.down")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            Text(pane.primaryLabel)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+
+            Text(pane.secondaryLabel)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+        }
+        .padding(7)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .background(pane.hasWindow ? Color.blue.opacity(0.14) : Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .stroke(pane.hasWindow ? Color.blue.opacity(0.42) : Color.secondary.opacity(0.18), lineWidth: 1)
+        )
+        .accessibilityLabel("\(pane.slotTitle), \(pane.primaryLabel), \(pane.secondaryLabel)")
     }
 }
 
@@ -361,15 +467,13 @@ private struct LayoutBuilderSection: View {
                         .disabled(store.isExecuting)
                 }
 
-                VStack(spacing: 6) {
-                    ForEach(0..<store.layoutSlotCount, id: \.self) { index in
-                        SlotPickerRow(
-                            title: store.splitSlotTitle(for: index),
-                            selection: splitSelectionBinding(for: index),
-                            windows: store.availableWindows,
-                            isDisabled: store.isExecuting || store.availableWindows.isEmpty
-                        )
-                    }
+                LayoutMockupPreview(
+                    panes: store.layoutPreviewPanes,
+                    windows: store.availableWindows,
+                    height: 172,
+                    isDisabled: store.isExecuting
+                ) { position, selectedID in
+                    store.setSplitWindowSelection(selectedID, at: position)
                 }
 
                 HStack(alignment: .center, spacing: 10) {
@@ -388,47 +492,6 @@ private struct LayoutBuilderSection: View {
                 }
             }
         }
-    }
-
-    private func splitSelectionBinding(for index: Int) -> Binding<String> {
-        Binding(
-            get: {
-                store.splitWindowID(at: index)
-            },
-            set: { selectedID in
-                store.setSplitWindowSelection(selectedID, at: index)
-            }
-        )
-    }
-}
-
-private struct SlotPickerRow: View {
-    let title: String
-    let selection: Binding<String>
-    let windows: [WindowItem]
-    let isDisabled: Bool
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 84, alignment: .leading)
-
-            Picker(title, selection: selection) {
-                Text("Choose window").tag("")
-
-                ForEach(windows) { window in
-                    Text(window.displayName).tag(window.id)
-                }
-            }
-            .labelsHidden()
-            .frame(maxWidth: .infinity, alignment: .trailing)
-            .disabled(isDisabled)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
     }
 }
 
