@@ -20,6 +20,19 @@ struct WindowManagementService {
         }
     }
 
+    private struct WindowListSnapshot {
+        let processIdentifier: pid_t
+        let windowNumber: CGWindowID
+        let title: String
+        let frame: CGRect
+        let order: Int
+    }
+
+    private struct WindowItemCandidate {
+        let window: WindowItem
+        let order: Int?
+    }
+
     func hasAccessibilityAccess() -> Bool {
         AXIsProcessTrusted()
     }
@@ -312,16 +325,28 @@ struct WindowManagementService {
     }
 
     func collectAvailableWindows() -> [WindowItem] {
-        collectVisibleWindowItems()
+        let accessibilityWindows = collectAccessibilityWindowCandidates()
+            .map(\.window)
+            .sorted(by: windowPickerSort)
+
+        guard !accessibilityWindows.isEmpty else {
+            return collectVisibleWindowItems()
+        }
+
+        return accessibilityWindows
     }
 
     func windowUnderMouse() -> WindowItem? {
         let mouseLocation = NSEvent.mouseLocation
         let windowListPoint = windowListPoint(from: mouseLocation)
+        let accessibilityCandidates = collectAccessibilityWindowCandidates()
+        let candidates = accessibilityCandidates.isEmpty ? collectVisibleWindowCandidates() : accessibilityCandidates
 
-        return collectVisibleWindowItems().first { window in
-            window.frame.contains(windowListPoint)
-        }
+        return candidates
+            .filter { $0.window.frame.contains(windowListPoint) }
+            .sorted(by: windowHitTestSort)
+            .first?
+            .window
     }
 
     func appKitFrame(for window: WindowItem) -> CGRect? {
@@ -329,11 +354,11 @@ struct WindowManagementService {
     }
 
     private func collectVisibleWindowItems() -> [WindowItem] {
-        guard AXIsProcessTrusted() else {
-            return []
-        }
+        collectVisibleWindowCandidates().map(\.window)
+    }
 
-        guard let windowInfo = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
+    private func collectVisibleWindowCandidates() -> [WindowItemCandidate] {
+        guard AXIsProcessTrusted() else {
             return []
         }
 
@@ -351,13 +376,120 @@ struct WindowManagementService {
 
         var windowCountsByPID: [pid_t: Int] = [:]
 
-        return windowInfo.compactMap { info -> WindowItem? in
+        return visibleWindowSnapshots().compactMap { snapshot -> WindowItemCandidate? in
             guard
-                let processIdentifier = info[kCGWindowOwnerPID as String] as? pid_t,
-                let app = runningAppsByPID[processIdentifier],
+                let app = runningAppsByPID[snapshot.processIdentifier],
                 app.activationPolicy == .regular,
                 let appName = app.localizedName,
-                appName != "Window Arranger",
+                appName != "Window Arranger"
+            else {
+                return nil
+            }
+
+            let windowIndex = windowCountsByPID[snapshot.processIdentifier, default: 0]
+            windowCountsByPID[snapshot.processIdentifier] = windowIndex + 1
+
+            return WindowItemCandidate(
+                window: WindowItem(
+                    id: "\(snapshot.windowNumber)",
+                    appName: appName,
+                    bundleIdentifier: app.bundleIdentifier,
+                    processIdentifier: snapshot.processIdentifier,
+                    windowNumber: snapshot.windowNumber,
+                    windowIndex: windowIndex,
+                    title: snapshot.title,
+                    frame: snapshot.frame
+                ),
+                order: snapshot.order
+            )
+        }
+    }
+
+    private func collectAccessibilityWindowCandidates() -> [WindowItemCandidate] {
+        guard AXIsProcessTrusted() else {
+            return []
+        }
+
+        let windowSnapshots = visibleWindowSnapshots()
+        let runningApps = NSWorkspace.shared.runningApplications
+            .filter(isExternalRegularApplication)
+            .sorted { lhs, rhs in
+                (lhs.localizedName ?? "").localizedCaseInsensitiveCompare(rhs.localizedName ?? "") == .orderedAscending
+            }
+
+        var usedWindowNumbers = Set<CGWindowID>()
+        var seenIDs = Set<String>()
+        var windows: [WindowItemCandidate] = []
+
+        for app in runningApps {
+            guard let appName = app.localizedName else {
+                continue
+            }
+
+            let windowElements = accessibilityWindowElements(for: app.processIdentifier)
+
+            for (index, element) in windowElements.enumerated() {
+                let title = axStringValue(element, attribute: kAXTitleAttribute as CFString)
+                let axFrame = axFrameValue(element)
+                let snapshot = bestWindowSnapshot(
+                    for: app.processIdentifier,
+                    title: title,
+                    frame: axFrame,
+                    snapshots: windowSnapshots,
+                    usedWindowNumbers: usedWindowNumbers
+                )
+                let frame = axFrame ?? snapshot?.frame ?? .zero
+
+                guard frame.width >= 80, frame.height >= 80 else {
+                    continue
+                }
+
+                let windowNumber = snapshot?.windowNumber ?? 0
+                let windowID = snapshot.map { "\($0.windowNumber)" }
+                    ?? accessibilityWindowID(
+                        processIdentifier: app.processIdentifier,
+                        index: index,
+                        title: title,
+                        frame: frame
+                    )
+
+                guard seenIDs.insert(windowID).inserted else {
+                    continue
+                }
+
+                if let snapshot {
+                    usedWindowNumbers.insert(snapshot.windowNumber)
+                }
+
+                windows.append(
+                    WindowItemCandidate(
+                        window: WindowItem(
+                            id: windowID,
+                            appName: appName,
+                            bundleIdentifier: app.bundleIdentifier,
+                            processIdentifier: app.processIdentifier,
+                            windowNumber: windowNumber,
+                            windowIndex: index,
+                            title: title,
+                            frame: frame
+                        ),
+                        order: snapshot?.order
+                    )
+                )
+            }
+        }
+
+        return windows
+    }
+
+    private func visibleWindowSnapshots() -> [WindowListSnapshot] {
+        guard let windowInfo = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
+            return []
+        }
+
+        return windowInfo.enumerated().compactMap { order, info -> WindowListSnapshot? in
+            guard
+                let processIdentifier = info[kCGWindowOwnerPID as String] as? pid_t,
                 let windowNumber = info[kCGWindowNumber as String] as? CGWindowID,
                 let layer = info[kCGWindowLayer as String] as? Int,
                 layer == 0,
@@ -377,21 +509,129 @@ struct WindowManagementService {
                 return nil
             }
 
-            let title = info[kCGWindowName as String] as? String ?? ""
-            let windowIndex = windowCountsByPID[processIdentifier, default: 0]
-            windowCountsByPID[processIdentifier] = windowIndex + 1
-
-            return WindowItem(
-                id: "\(windowNumber)",
-                appName: appName,
-                bundleIdentifier: app.bundleIdentifier,
+            return WindowListSnapshot(
                 processIdentifier: processIdentifier,
                 windowNumber: windowNumber,
-                windowIndex: windowIndex,
-                title: title,
-                frame: frame
+                title: info[kCGWindowName as String] as? String ?? "",
+                frame: frame,
+                order: order
             )
         }
+    }
+
+    private func bestWindowSnapshot(
+        for processIdentifier: pid_t,
+        title: String,
+        frame: CGRect?,
+        snapshots: [WindowListSnapshot],
+        usedWindowNumbers: Set<CGWindowID>
+    ) -> WindowListSnapshot? {
+        let candidates = snapshots.filter { snapshot in
+            snapshot.processIdentifier == processIdentifier
+                && !usedWindowNumbers.contains(snapshot.windowNumber)
+        }
+
+        guard !candidates.isEmpty else {
+            return nil
+        }
+
+        let titleMatches = title.isEmpty ? [] : candidates.filter { $0.title == title }
+        let preferredCandidates = titleMatches.isEmpty ? candidates : titleMatches
+
+        guard let frame else {
+            return preferredCandidates.min { $0.order < $1.order }
+        }
+
+        let bestMatch = preferredCandidates.min {
+            windowFrameDistance($0.frame, to: frame) < windowFrameDistance($1.frame, to: frame)
+        }
+
+        guard let bestMatch else {
+            return nil
+        }
+
+        let distance = windowFrameDistance(bestMatch.frame, to: frame)
+
+        if distance < 160 || (!title.isEmpty && bestMatch.title == title) {
+            return bestMatch
+        }
+
+        return nil
+    }
+
+    private func accessibilityWindowID(
+        processIdentifier: pid_t,
+        index: Int,
+        title: String,
+        frame: CGRect
+    ) -> String {
+        let titleComponent = title.isEmpty ? "untitled" : title
+        let roundedFrame = [
+            Int(frame.minX.rounded()),
+            Int(frame.minY.rounded()),
+            Int(frame.width.rounded()),
+            Int(frame.height.rounded())
+        ]
+            .map(String.init)
+            .joined(separator: "-")
+
+        return "ax-\(processIdentifier)-\(index)-\(titleComponent)-\(roundedFrame)"
+    }
+
+    private func windowPickerSort(_ lhs: WindowItem, _ rhs: WindowItem) -> Bool {
+        if lhs.processIdentifier == rhs.processIdentifier {
+            return lhs.windowIndex < rhs.windowIndex
+        }
+
+        let appNameComparison = lhs.appName.localizedCaseInsensitiveCompare(rhs.appName)
+
+        if appNameComparison != .orderedSame {
+            return appNameComparison == .orderedAscending
+        }
+
+        return lhs.id.localizedCaseInsensitiveCompare(rhs.id) == .orderedAscending
+    }
+
+    private func windowHitTestSort(_ lhs: WindowItemCandidate, _ rhs: WindowItemCandidate) -> Bool {
+        let lhsFrame = lhs.window.frame
+        let rhsFrame = rhs.window.frame
+        let lhsArea = lhsFrame.positiveArea
+        let rhsArea = rhsFrame.positiveArea
+
+        if contains(lhsFrame, rhsFrame), lhsArea > rhsArea {
+            return false
+        }
+
+        if contains(rhsFrame, lhsFrame), rhsArea > lhsArea {
+            return true
+        }
+
+        if let lhsOrder = lhs.order, let rhsOrder = rhs.order, lhsOrder != rhsOrder {
+            return lhsOrder < rhsOrder
+        }
+
+        if lhs.order != nil, rhs.order == nil {
+            return true
+        }
+
+        if lhs.order == nil, rhs.order != nil {
+            return false
+        }
+
+        if lhsArea != rhsArea {
+            return lhsArea < rhsArea
+        }
+
+        return windowPickerSort(lhs.window, rhs.window)
+    }
+
+    private func contains(_ outerFrame: CGRect, _ innerFrame: CGRect) -> Bool {
+        let tolerance: CGFloat = 2
+
+        return innerFrame.minX >= outerFrame.minX - tolerance
+            && innerFrame.minY >= outerFrame.minY - tolerance
+            && innerFrame.maxX <= outerFrame.maxX + tolerance
+            && innerFrame.maxY <= outerFrame.maxY + tolerance
     }
 
     func currentVisibleWindowManagementFrame() -> CGRect? {
@@ -1290,4 +1530,14 @@ struct WindowManagementService {
         }
     }
 
+}
+
+private extension CGRect {
+    var positiveArea: CGFloat {
+        guard width > 0, height > 0 else {
+            return 0
+        }
+
+        return width * height
+    }
 }
