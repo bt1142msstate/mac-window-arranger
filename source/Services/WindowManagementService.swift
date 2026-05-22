@@ -501,7 +501,7 @@ struct WindowManagementService {
                 let processIdentifier = info[kCGWindowOwnerPID as String] as? pid_t,
                 let windowNumber = info[kCGWindowNumber as String] as? CGWindowID,
                 let layer = info[kCGWindowLayer as String] as? Int,
-                layer == 0,
+                layer >= 0,
                 let bounds = info[kCGWindowBounds as String] as? [String: Any]
             else {
                 return nil
