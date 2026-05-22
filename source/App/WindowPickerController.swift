@@ -2,6 +2,7 @@ import AppKit
 
 final class WindowPickerController {
     private let service = WindowManagementService()
+    private let previewCaptureService = WindowPreviewCaptureService()
     private var capturePanels: [WindowPickerCapturePanel] = []
     private var focusPanels: [WindowPickerFocusPanel] = []
     private var highlightPanel: WindowPickerHighlightPanel?
@@ -18,6 +19,7 @@ final class WindowPickerController {
 
         self.onPicked = onPicked
         self.onCancelled = onCancelled
+        previewCaptureService.requestScreenCaptureAccessIfNeeded()
 
         capturePanels = NSScreen.screens.map { screen in
             let panel = WindowPickerCapturePanel(
@@ -116,22 +118,36 @@ final class WindowPickerController {
             let window,
             let frame = service.appKitFrame(for: window)
         else {
-            updateFocusOverlay(for: nil)
+            updateFocusOverlay(nil)
             highlightPanel?.orderOut(nil)
             return
         }
 
-        updateFocusOverlay(for: frame)
+        let foregroundFrames = service.foregroundAppKitFrames(overlapping: window)
+        updateFocusOverlay(WindowPickerFocusOverlay(focusedFrame: frame))
         let panel = highlightPanel ?? makeHighlightPanel()
         highlightPanel = panel
-        (panel.contentView as? WindowPickerHighlightView)?.configure(for: window)
+        (panel.contentView as? WindowPickerHighlightView)?.configure(
+            for: window,
+            previewImage: nil,
+            foregroundFrames: foregroundFrames
+        )
         panel.setFrame(frame.insetBy(dx: -4, dy: -4), display: true)
         panel.orderFrontRegardless()
+
+        let hoveredWindowID = window.id
+        previewCaptureService.capturePreview(for: window, displaySize: frame.size) { [weak self, weak panel] image in
+            guard self?.hoveredWindow?.id == hoveredWindowID else {
+                return
+            }
+
+            (panel?.contentView as? WindowPickerHighlightView)?.updatePreviewImage(image)
+        }
     }
 
-    private func updateFocusOverlay(for focusedFrame: CGRect?) {
+    private func updateFocusOverlay(_ overlay: WindowPickerFocusOverlay?) {
         for panel in focusPanels {
-            (panel.contentView as? WindowPickerFocusView)?.focusedScreenFrame = focusedFrame
+            (panel.contentView as? WindowPickerFocusView)?.overlay = overlay
         }
     }
 
@@ -328,8 +344,12 @@ final class WindowPickerCaptureView: NSView {
     }
 }
 
+fileprivate struct WindowPickerFocusOverlay {
+    let focusedFrame: CGRect
+}
+
 final class WindowPickerFocusView: NSView {
-    var focusedScreenFrame: CGRect? {
+    fileprivate var overlay: WindowPickerFocusOverlay? {
         didSet {
             needsDisplay = true
         }
@@ -343,22 +363,15 @@ final class WindowPickerFocusView: NSView {
         super.draw(dirtyRect)
 
         guard
-            let focusedScreenFrame,
-            let windowFrame = window?.frame
+            let overlay,
+            let windowFrame = window?.frame,
+            let focusedFrame = localFrame(from: overlay.focusedFrame, in: windowFrame)?
+                .insetBy(dx: -5, dy: -5)
+                .intersection(bounds),
+            !focusedFrame.isNull,
+            focusedFrame.width > 0,
+            focusedFrame.height > 0
         else {
-            return
-        }
-
-        let focusedFrame = CGRect(
-            x: focusedScreenFrame.minX - windowFrame.minX,
-            y: focusedScreenFrame.minY - windowFrame.minY,
-            width: focusedScreenFrame.width,
-            height: focusedScreenFrame.height
-        )
-            .insetBy(dx: -5, dy: -5)
-            .intersection(bounds)
-
-        guard !focusedFrame.isNull, focusedFrame.width > 0, focusedFrame.height > 0 else {
             return
         }
 
@@ -368,12 +381,29 @@ final class WindowPickerFocusView: NSView {
         NSColor.black.withAlphaComponent(0.34).setFill()
         path.fill()
     }
+
+    private func localFrame(from screenFrame: CGRect, in windowFrame: CGRect) -> CGRect? {
+        let localFrame = CGRect(
+            x: screenFrame.minX - windowFrame.minX,
+            y: screenFrame.minY - windowFrame.minY,
+            width: screenFrame.width,
+            height: screenFrame.height
+        )
+
+        guard localFrame.intersects(bounds) else {
+            return nil
+        }
+
+        return localFrame
+    }
 }
 
 final class WindowPickerHighlightView: NSView {
     private let badgeView = NSVisualEffectView()
     private let iconView = NSImageView()
     private let titleField = NSTextField(labelWithString: "")
+    private var previewImage: NSImage?
+    private var foregroundFrames: [CGRect] = []
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -406,13 +436,68 @@ final class WindowPickerHighlightView: NSView {
         nil
     }
 
-    func configure(for window: WindowItem) {
+    func configure(for window: WindowItem, previewImage: NSImage?, foregroundFrames: [CGRect]) {
+        self.previewImage = previewImage
+        self.foregroundFrames = foregroundFrames
         iconView.image = appIcon(
             bundleIdentifier: window.bundleIdentifier,
             appName: window.appName
         )
         titleField.stringValue = window.appName
+        needsDisplay = true
         needsLayout = true
+    }
+
+    func updatePreviewImage(_ image: NSImage?) {
+        previewImage = image
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        guard
+            !foregroundFrames.isEmpty,
+            let windowFrame = window?.frame
+        else {
+            return
+        }
+
+        let imageRect = bounds.insetBy(dx: 4, dy: 4)
+
+        for foregroundFrame in foregroundFrames {
+            guard
+                let localForegroundFrame = localFrame(from: foregroundFrame, in: windowFrame)?
+                    .intersection(imageRect),
+                !localForegroundFrame.isNull,
+                localForegroundFrame.width > 0,
+                localForegroundFrame.height > 0
+            else {
+                continue
+            }
+
+            NSGraphicsContext.saveGraphicsState()
+            let clipPath = NSBezierPath(roundedRect: localForegroundFrame, xRadius: 7, yRadius: 7)
+            clipPath.addClip()
+
+            if let previewImage {
+                previewImage.draw(
+                    in: imageRect,
+                    from: .zero,
+                    operation: .sourceOver,
+                    fraction: 0.76,
+                    respectFlipped: true,
+                    hints: [.interpolation: NSImageInterpolation.high]
+                )
+            }
+
+            NSColor.white.withAlphaComponent(previewImage == nil ? 0.42 : 0.16).setFill()
+            clipPath.fill()
+            NSColor.controlAccentColor.withAlphaComponent(0.22).setStroke()
+            clipPath.lineWidth = 1
+            clipPath.stroke()
+            NSGraphicsContext.restoreGraphicsState()
+        }
     }
 
     override func layout() {
@@ -444,6 +529,21 @@ final class WindowPickerHighlightView: NSView {
             width: max(badgeWidth - horizontalPadding * 2 - iconSize - spacing, 10),
             height: badgeHeight - 8
         )
+    }
+
+    private func localFrame(from screenFrame: CGRect, in windowFrame: CGRect) -> CGRect? {
+        let localFrame = CGRect(
+            x: screenFrame.minX - windowFrame.minX,
+            y: screenFrame.minY - windowFrame.minY,
+            width: screenFrame.width,
+            height: screenFrame.height
+        )
+
+        guard localFrame.intersects(bounds) else {
+            return nil
+        }
+
+        return localFrame
     }
 
     private func appIcon(bundleIdentifier: String?, appName: String?) -> NSImage {

@@ -19,6 +19,7 @@ Mac Window Arranger is a small native macOS SwiftUI utility for resizing and arr
 - Resize the frontmost window or every standard window for a selected app.
 - Search running and installed apps from the resize target picker, prioritized by focused app, visible windows, running apps, then installed apps.
 - Pick the resize target from the app picker, or use Pick Window to outline a hovered window and resize it on click.
+- Fade foreground windows that overlap the highlighted picker target so the target remains readable.
 - Use presets for common sizes like 1080p, 720p, mobile, tablet, and square.
 - Arrange selected windows into two-column, three-column, four-grid, and focus-stack layouts.
 - Save custom layouts and reopen the matching apps later with Open & Arrange.
@@ -53,8 +54,9 @@ The app follows a small native macOS SwiftUI structure:
 - macOS 14 or newer
 - Xcode command line tools
 - Accessibility permission for Window Arranger
+- Optional Screen Recording permission for the clearest picker overlap preview
 
-On first use, grant Accessibility permission in System Settings so the app can read, move, unminimize, and resize windows owned by other apps.
+On first use, grant Accessibility permission in System Settings so the app can read, move, unminimize, and resize windows owned by other apps. Screen Recording is only used during window picking to blend the highlighted window through overlapping foreground windows; without it, the picker falls back to a frosted overlap effect.
 
 ## Install
 
@@ -116,7 +118,7 @@ Local DMGs are signed with the stable local signing identity so they validate on
 
 ## Privacy
 
-Mac Window Arranger does not collect analytics, tracking data, or network data. It reads the local list of running apps and window titles so you can select windows to arrange. Saved layouts stay on this Mac in app preferences. See [docs/PRIVACY.md](docs/PRIVACY.md).
+Mac Window Arranger does not collect analytics, tracking data, or network data. It reads the local list of running apps and window titles so you can select windows to arrange. Optional Screen Recording access is used only while picking a window so overlapping windows can appear translucent over the highlighted target. Saved layouts stay on this Mac in app preferences. See [docs/PRIVACY.md](docs/PRIVACY.md).
 
 ## Signing
 

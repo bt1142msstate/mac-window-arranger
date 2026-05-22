@@ -45,6 +45,8 @@
 	<string>Copyright © 2026 Mac Window Arranger contributors. All rights reserved.</string>
 	<key>NSAccessibilityUsageDescription</key>
 	<string>Window Arranger needs Accessibility access to move, resize, and arrange windows from other apps.</string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>Window Arranger uses Screen Recording only while choosing a window so overlapping windows can be shown translucent around the highlighted window.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>

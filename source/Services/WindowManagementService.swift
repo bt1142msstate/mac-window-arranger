@@ -362,6 +362,45 @@ struct WindowManagementService {
         appKitFrame(fromWindowListFrame: window.frame)
     }
 
+    func foregroundAppKitFrames(overlapping window: WindowItem) -> [CGRect] {
+        let snapshots = visibleWindowSnapshots()
+        let selectedSnapshot = matchingWindowSnapshot(for: window, in: snapshots)
+
+        guard
+            let selectedOrder = selectedSnapshot?.order,
+            let selectedFrame = selectedSnapshot
+                .flatMap({ appKitFrame(fromWindowListFrame: $0.frame) }) ?? appKitFrame(for: window)
+        else {
+            return []
+        }
+
+        let selectedWindowNumber = selectedSnapshot?.windowNumber ?? window.windowNumber
+        let currentProcessIdentifier = ProcessInfo.processInfo.processIdentifier
+
+        return snapshots.compactMap { snapshot -> CGRect? in
+            guard
+                snapshot.order < selectedOrder,
+                snapshot.windowNumber != selectedWindowNumber,
+                snapshot.processIdentifier != currentProcessIdentifier,
+                let app = NSRunningApplication(processIdentifier: snapshot.processIdentifier),
+                app.activationPolicy == .regular,
+                app.localizedName != "Window Arranger",
+                let frame = appKitFrame(fromWindowListFrame: snapshot.frame),
+                frame.intersects(selectedFrame)
+            else {
+                return nil
+            }
+
+            let overlapFrame = frame.intersection(selectedFrame)
+
+            guard !overlapFrame.isNull, overlapFrame.width > 0, overlapFrame.height > 0 else {
+                return nil
+            }
+
+            return overlapFrame
+        }
+    }
+
     private func collectVisibleWindowItems() -> [WindowItem] {
         collectVisibleWindowCandidates().map(\.window)
     }
@@ -566,6 +605,20 @@ struct WindowManagementService {
         }
 
         return nil
+    }
+
+    private func matchingWindowSnapshot(for window: WindowItem, in snapshots: [WindowListSnapshot]) -> WindowListSnapshot? {
+        if window.windowNumber != 0 {
+            return snapshots.first { $0.windowNumber == window.windowNumber }
+        }
+
+        return bestWindowSnapshot(
+            for: window.processIdentifier,
+            title: window.title,
+            frame: window.frame,
+            snapshots: snapshots,
+            usedWindowNumbers: []
+        )
     }
 
     private func accessibilityWindowID(

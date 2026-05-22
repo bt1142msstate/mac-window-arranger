@@ -8,7 +8,11 @@ layouts stay on the device. Saved layouts are stored locally in the app's
 preferences using `UserDefaults`.
 
 Mac Window Arranger requests Accessibility permission so it can move and resize
-windows in other apps. The app does not use analytics, advertising, tracking, or
-network services.
+windows in other apps. It may also request Screen Recording permission while
+you are choosing a window, only to show overlapping foreground windows as
+translucent over the highlighted target. Screen contents are not stored,
+transmitted, or used outside that picker effect.
 
-Last updated: May 21, 2026
+The app does not use analytics, advertising, tracking, or network services.
+
+Last updated: May 22, 2026

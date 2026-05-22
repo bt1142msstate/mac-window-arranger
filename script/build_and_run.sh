@@ -253,6 +253,7 @@ build_bundle() {
       -o "$target_binary" \
       -framework SwiftUI \
       -framework AppKit \
+      -framework ScreenCaptureKit \
       -framework ApplicationServices
 
     built_binaries+=("$target_binary")

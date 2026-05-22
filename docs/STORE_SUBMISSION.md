@@ -14,7 +14,8 @@ Accessibility on this Mac, which breaks the app's core feature.
 - `UserDefaults` required-reason API declaration using reason `CA92.1`.
 - In-app Privacy Policy window from the Help menu.
 - Local privacy policy draft at `docs/PRIVACY.md`.
-- App category, copyright, export-compliance, Accessibility usage, and icon
+- App category, copyright, export-compliance, Accessibility and Screen
+  Recording usage, and icon
   metadata in `Info.plist`.
 - Universal macOS build by default: `arm64` and `x86_64`.
 - AppleScript/System Events dependency removed from the app source.
@@ -58,7 +59,8 @@ Apple references:
 - Provide the Privacy Policy as a public URL. The included `docs/PRIVACY.md` is
   the draft content.
 - Fill privacy disclosures: no tracking, no analytics, no network collection;
-  disclose on-device window/app title access in release notes or reviewer notes.
+  disclose on-device window/app title access and picker-only Screen Recording
+  usage in release notes or reviewer notes.
 - Prepare screenshots, app description, support URL, marketing URL if desired,
   age rating, category, and low-cost paid pricing.
 
