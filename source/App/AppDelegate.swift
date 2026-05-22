@@ -21,6 +21,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
+        guard !activateExistingInstanceIfNeeded() else {
+            NSApp.terminate(nil)
+            return
+        }
+
         NSAppleEventManager.shared().setEventHandler(
             self,
             andSelector: #selector(handleGetURLEvent(_:withReplyEvent:)),
@@ -42,6 +47,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+
+    private func activateExistingInstanceIfNeeded() -> Bool {
+        guard let bundleIdentifier = Bundle.main.bundleIdentifier else {
+            return false
+        }
+
+        let currentProcessIdentifier = ProcessInfo.processInfo.processIdentifier
+        let existingInstance = NSRunningApplication
+            .runningApplications(withBundleIdentifier: bundleIdentifier)
+            .first { application in
+                application.processIdentifier != currentProcessIdentifier && !application.isTerminated
+            }
+
+        guard let existingInstance else {
+            return false
+        }
+
+        existingInstance.activate(options: [.activateAllWindows])
+        return true
     }
 
     func showCompactStatus(message: String, kind: ResizeStatusKind) {
