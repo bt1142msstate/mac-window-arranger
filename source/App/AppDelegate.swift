@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let compactPanelController = CompactPanelController()
     private let windowPickerController = WindowPickerController()
     private let transitionCoordinator = WindowTransitionCoordinator()
+    private let mainWindowBoundaryController = MainWindowBoundaryController()
     private let compactLayoutService = WindowManagementService()
     private weak var mainWindow: NSWindow?
     private var fallbackMainWindow: NSWindow?
@@ -56,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             window.alphaValue = 1
+            self.constrainMainWindowAboveDock(window)
             NSApp.activate(ignoringOtherApps: true)
             window.makeKeyAndOrderFront(nil)
             window.orderFrontRegardless()
@@ -72,6 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             window.alphaValue = 1
+            self.constrainMainWindowAboveDock(window)
             NSApp.activate(ignoringOtherApps: true)
             window.makeKeyAndOrderFront(nil)
             window.orderFrontRegardless()
@@ -288,7 +291,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let miniFrame = compactPanelController.currentFrame ?? compactPanelController.frame(on: window.screen)
-        let expandedFrame = lastExpandedMainWindowFrame ?? window.frame
+        let expandedFrame = constrainedMainWindowFrame(lastExpandedMainWindowFrame ?? window.frame, for: window)
         let miniWindow = compactPanelController.currentWindow
 
         transitionCoordinator.transition(
@@ -346,7 +349,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let sourceFrame = window.frame
 
         if sourceFrame.width > targetFrame.width || sourceFrame.height > targetFrame.height {
-            lastExpandedMainWindowFrame = sourceFrame
+            lastExpandedMainWindowFrame = constrainedMainWindowFrame(sourceFrame, for: window)
         }
 
         let showMiniMode = {
@@ -489,9 +492,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let isNewMainWindow = mainWindow !== window
         mainWindow = window
         configureMainWindow(window)
+        mainWindowBoundaryController.track(window)
 
         if centerIfNeeded || isNewMainWindow {
             positionMainWindowAboveDock(window)
+        } else {
+            constrainMainWindowAboveDock(window)
         }
 
         return window
@@ -521,6 +527,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .canJoinAllSpaces,
             .fullScreenAuxiliary
         ])
+    }
+
+    private func constrainMainWindowAboveDock(_ window: NSWindow) {
+        let constrainedFrame = constrainedMainWindowFrame(window.frame, for: window)
+
+        guard constrainedFrame != window.frame else {
+            return
+        }
+
+        window.setFrame(constrainedFrame, display: true)
+    }
+
+    private func constrainedMainWindowFrame(_ frame: NSRect, for window: NSWindow) -> NSRect {
+        guard let screen = NSScreen.bestScreen(for: frame, fallback: window.screen) else {
+            return frame
+        }
+
+        let margin: CGFloat = 12
+        var constrainedFrame = frame
+        let minimumY = screen.visibleFrame.minY + margin
+
+        if constrainedFrame.minY < minimumY {
+            constrainedFrame.origin.y = minimumY
+        }
+
+        return constrainedFrame
     }
 
     private func positionMainWindowAboveDock(_ window: NSWindow) {
@@ -585,5 +617,91 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return .success
+    }
+}
+
+private final class MainWindowBoundaryController {
+    private weak var trackedWindow: NSWindow?
+    private var observer: NSObjectProtocol?
+    private var isConstrainingFrame = false
+
+    func track(_ window: NSWindow) {
+        guard trackedWindow !== window else {
+            return
+        }
+
+        if let observer {
+            NotificationCenter.default.removeObserver(observer)
+        }
+
+        trackedWindow = window
+        observer = NotificationCenter.default.addObserver(
+            forName: NSWindow.didMoveNotification,
+            object: window,
+            queue: .main
+        ) { [weak self] notification in
+            guard let window = notification.object as? NSWindow else {
+                return
+            }
+
+            self?.constrain(window)
+        }
+    }
+
+    deinit {
+        if let observer {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    private func constrain(_ window: NSWindow) {
+        guard !isConstrainingFrame else {
+            return
+        }
+
+        guard let screen = NSScreen.bestScreen(for: window.frame, fallback: window.screen) else {
+            return
+        }
+
+        let margin: CGFloat = 12
+        let minimumY = screen.visibleFrame.minY + margin
+
+        guard window.frame.minY < minimumY else {
+            return
+        }
+
+        var frame = window.frame
+        frame.origin.y = minimumY
+
+        isConstrainingFrame = true
+        window.setFrame(frame, display: true)
+        isConstrainingFrame = false
+    }
+}
+
+private extension NSScreen {
+    static func bestScreen(for frame: NSRect, fallback: NSScreen?) -> NSScreen? {
+        let candidates = screens.map { screen in
+            (screen: screen, area: screen.frame.intersection(frame).positiveArea)
+        }
+        let bestMatch = candidates.max { first, second in
+            first.area < second.area
+        }
+
+        if let bestMatch, bestMatch.area > 0 {
+            return bestMatch.screen
+        }
+
+        return fallback ?? main ?? screens.first
+    }
+}
+
+private extension NSRect {
+    var positiveArea: CGFloat {
+        guard width > 0, height > 0 else {
+            return 0
+        }
+
+        return width * height
     }
 }
