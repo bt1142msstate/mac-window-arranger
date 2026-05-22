@@ -34,7 +34,7 @@ struct ContentView: View {
         .toolbar {
             ToolbarItem(placement: .principal) {
                 WorkflowModePicker(store: store)
-                    .frame(width: 126)
+                    .frame(width: 116)
             }
 
             ToolbarItem {
@@ -82,20 +82,77 @@ private struct WorkflowModePicker: View {
     @State private var visualMode: WindowWorkflowMode?
     @State private var pendingMode: WindowWorkflowMode?
 
-    private let pillTransitionDuration: TimeInterval = 0.22
+    private let pillTransitionDuration: TimeInterval = 0.36
+    private let pillAnimation: Animation = .spring(response: 0.36, dampingFraction: 0.88, blendDuration: 0.06)
+    private let modes = WindowWorkflowMode.allCases
 
     var body: some View {
-        Picker("Mode", selection: visualWorkflowModeBinding) {
-            ForEach(WindowWorkflowMode.allCases) { mode in
-                Image(systemName: mode.symbolName)
-                    .tag(mode)
-                    .help(mode.title)
-                    .accessibilityLabel(mode.title)
+        GeometryReader { proxy in
+            let mode = visualMode ?? store.workflowMode
+            let segmentWidth = proxy.size.width / CGFloat(max(modes.count, 1))
+            let selectedIndex = CGFloat(index(of: mode))
+            let indicatorWidth = min(42, max(segmentWidth - 16, 0))
+            let indicatorHeight = max(proxy.size.height - 12, 0)
+            let indicatorX = (selectedIndex * segmentWidth) + ((segmentWidth - indicatorWidth) / 2)
+
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.clear)
+
+                Capsule()
+                    .fill(.ultraThinMaterial)
+                    .frame(width: indicatorWidth, height: indicatorHeight)
+                    .overlay(
+                        Capsule()
+                            .fill(Color.white.opacity(0.10))
+                    )
+                    .overlay(
+                        Capsule()
+                            .stroke(Color.white.opacity(0.38), lineWidth: 0.8)
+                    )
+                    .shadow(color: Color.black.opacity(0.10), radius: 3, x: 0, y: 1)
+                    .offset(x: indicatorX)
+                    .animation(pillAnimation, value: selectedIndex)
+
+                HStack(spacing: 0) {
+                    ForEach(modes) { pickerMode in
+                        Button {
+                            guard !isInteractionDisabled else {
+                                return
+                            }
+
+                            requestMode(pickerMode)
+                        } label: {
+                            Image(systemName: pickerMode.symbolName)
+                                .font(.system(size: 14, weight: .semibold))
+                                .frame(width: segmentWidth, height: proxy.size.height)
+                                .foregroundStyle(mode == pickerMode ? .primary : .secondary)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .background(Color.clear)
+                        .help(pickerMode.title)
+                        .accessibilityLabel(pickerMode.title)
+                        .accessibilityAddTraits(.isButton)
+                        .simultaneousGesture(
+                            TapGesture().onEnded {
+                                guard !isInteractionDisabled else {
+                                    return
+                                }
+
+                                requestMode(pickerMode)
+                            }
+                        )
+                    }
+                }
             }
+            .overlay(
+                Capsule()
+                    .stroke(Color.secondary.opacity(0.30), lineWidth: 1)
+            )
         }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .disabled(store.isExecuting || store.isPickingWindow || pendingMode != nil)
+        .frame(height: 34)
+        .opacity(store.isExecuting || store.isPickingWindow ? 0.58 : 1)
         .onAppear {
             visualMode = store.workflowMode
         }
@@ -108,44 +165,48 @@ private struct WorkflowModePicker: View {
         }
     }
 
-    private var visualWorkflowModeBinding: Binding<WindowWorkflowMode> {
-        Binding(
-            get: {
-                visualMode ?? store.workflowMode
-            },
-            set: { newMode in
-                let currentMode = visualMode ?? store.workflowMode
+    private var isInteractionDisabled: Bool {
+        store.isExecuting || store.isPickingWindow || pendingMode != nil
+    }
 
-                guard newMode != currentMode, pendingMode == nil else {
-                    return
-                }
+    private func requestMode(_ newMode: WindowWorkflowMode) {
+        let currentMode = visualMode ?? store.workflowMode
 
-                visualMode = newMode
-                pendingMode = newMode
+        guard newMode != currentMode, pendingMode == nil else {
+            return
+        }
 
-                DispatchQueue.main.asyncAfter(deadline: .now() + pillTransitionDuration) {
-                    guard pendingMode == newMode else {
-                        return
-                    }
+        pendingMode = newMode
 
-                    guard let appDelegate = AppDelegate.shared else {
-                        store.workflowMode = newMode
-                        pendingMode = nil
-                        return
-                    }
+        withAnimation(pillAnimation) {
+            visualMode = newMode
+        }
 
-                    appDelegate.fitMainWindowToContentSize(
-                        newMode.contentSize,
-                        prepareContent: {
-                            store.workflowMode = newMode
-                        },
-                        completion: {
-                            pendingMode = nil
-                        }
-                    )
-                }
+        DispatchQueue.main.asyncAfter(deadline: .now() + pillTransitionDuration) {
+            guard pendingMode == newMode else {
+                return
             }
-        )
+
+            guard let appDelegate = AppDelegate.shared else {
+                store.workflowMode = newMode
+                pendingMode = nil
+                return
+            }
+
+            appDelegate.fitMainWindowToContentSize(
+                newMode.contentSize,
+                prepareContent: {
+                    store.workflowMode = newMode
+                },
+                completion: {
+                    pendingMode = nil
+                }
+            )
+        }
+    }
+
+    private func index(of mode: WindowWorkflowMode) -> Int {
+        modes.firstIndex(of: mode) ?? 0
     }
 }
 
