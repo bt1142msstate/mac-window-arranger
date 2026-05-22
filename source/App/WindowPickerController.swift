@@ -3,6 +3,7 @@ import AppKit
 final class WindowPickerController {
     private let service = WindowManagementService()
     private var capturePanels: [WindowPickerCapturePanel] = []
+    private var focusPanels: [WindowPickerFocusPanel] = []
     private var highlightPanel: WindowPickerHighlightPanel?
     private var hoveredWindow: WindowItem?
     private var onPicked: ((WindowItem) -> Void)?
@@ -41,6 +42,29 @@ final class WindowPickerController {
             ]
             panel.acceptsMouseMovedEvents = true
             panel.makeKeyAndOrderFront(nil)
+            return panel
+        }
+
+        focusPanels = NSScreen.screens.map { screen in
+            let panel = WindowPickerFocusPanel(
+                contentRect: screen.frame,
+                styleMask: [.borderless, .nonactivatingPanel],
+                backing: .buffered,
+                defer: false
+            )
+            panel.contentView = WindowPickerFocusView()
+            panel.isOpaque = false
+            panel.backgroundColor = .clear
+            panel.hasShadow = false
+            panel.ignoresMouseEvents = true
+            panel.level = .screenSaver
+            panel.collectionBehavior = [
+                .canJoinAllSpaces,
+                .fullScreenAuxiliary,
+                .ignoresCycle,
+                .stationary
+            ]
+            panel.orderFrontRegardless()
             return panel
         }
 
@@ -106,8 +130,8 @@ final class WindowPickerController {
     }
 
     private func updateFocusOverlay(for focusedFrame: CGRect?) {
-        for panel in capturePanels {
-            (panel.contentView as? WindowPickerCaptureView)?.focusedScreenFrame = focusedFrame
+        for panel in focusPanels {
+            (panel.contentView as? WindowPickerFocusView)?.focusedScreenFrame = focusedFrame
         }
     }
 
@@ -148,6 +172,12 @@ final class WindowPickerController {
             panel.close()
         }
         capturePanels.removeAll()
+
+        for panel in focusPanels {
+            panel.orderOut(nil)
+            panel.close()
+        }
+        focusPanels.removeAll()
 
         highlightPanel?.orderOut(nil)
         highlightPanel?.close()
@@ -226,13 +256,18 @@ final class WindowPickerHighlightPanel: NSPanel {
     }
 }
 
+final class WindowPickerFocusPanel: NSPanel {
+    override var canBecomeKey: Bool {
+        false
+    }
+
+    override var canBecomeMain: Bool {
+        false
+    }
+}
+
 final class WindowPickerCaptureView: NSView {
     weak var controller: WindowPickerController?
-    var focusedScreenFrame: CGRect? {
-        didSet {
-            needsDisplay = true
-        }
-    }
 
     override var acceptsFirstResponder: Bool {
         true
@@ -244,38 +279,6 @@ final class WindowPickerCaptureView: NSView {
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         self
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-
-        NSColor.black.withAlphaComponent(0.18).setFill()
-        bounds.fill()
-
-        guard
-            let focusedScreenFrame,
-            let windowFrame = window?.frame
-        else {
-            return
-        }
-
-        let localFrame = CGRect(
-            x: focusedScreenFrame.minX - windowFrame.minX,
-            y: focusedScreenFrame.minY - windowFrame.minY,
-            width: focusedScreenFrame.width,
-            height: focusedScreenFrame.height
-        )
-            .insetBy(dx: -4, dy: -4)
-            .intersection(bounds)
-
-        guard !localFrame.isNull, localFrame.width > 0, localFrame.height > 0 else {
-            return
-        }
-
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current?.compositingOperation = .clear
-        NSBezierPath(roundedRect: localFrame, xRadius: 10, yRadius: 10).fill()
-        NSGraphicsContext.restoreGraphicsState()
     }
 
     override func viewDidMoveToWindow() {
@@ -322,6 +325,48 @@ final class WindowPickerCaptureView: NSView {
         } else {
             super.keyDown(with: event)
         }
+    }
+}
+
+final class WindowPickerFocusView: NSView {
+    var focusedScreenFrame: CGRect? {
+        didSet {
+            needsDisplay = true
+        }
+    }
+
+    override var isOpaque: Bool {
+        false
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        guard
+            let focusedScreenFrame,
+            let windowFrame = window?.frame
+        else {
+            return
+        }
+
+        let focusedFrame = CGRect(
+            x: focusedScreenFrame.minX - windowFrame.minX,
+            y: focusedScreenFrame.minY - windowFrame.minY,
+            width: focusedScreenFrame.width,
+            height: focusedScreenFrame.height
+        )
+            .insetBy(dx: -5, dy: -5)
+            .intersection(bounds)
+
+        guard !focusedFrame.isNull, focusedFrame.width > 0, focusedFrame.height > 0 else {
+            return
+        }
+
+        let path = NSBezierPath(rect: bounds)
+        path.append(NSBezierPath(roundedRect: focusedFrame, xRadius: 11, yRadius: 11))
+        path.windingRule = .evenOdd
+        NSColor.black.withAlphaComponent(0.34).setFill()
+        path.fill()
     }
 }
 
