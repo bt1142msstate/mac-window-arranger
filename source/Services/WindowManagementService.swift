@@ -924,7 +924,7 @@ struct WindowManagementService {
 
     private func openApplicationIfNeeded(for slot: SavedLayoutSlot) -> String? {
         if let bundleIdentifier = slot.bundleIdentifier, !bundleIdentifier.isEmpty {
-            let runningApps = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
+            let runningApps = matchingLayoutApplications(for: slot)
 
             if runningApps.isEmpty {
                 guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) else {
@@ -974,14 +974,8 @@ struct WindowManagementService {
     }
 
     private func activateApplication(for slot: SavedLayoutSlot) {
-        if let bundleIdentifier = slot.bundleIdentifier, !bundleIdentifier.isEmpty {
-            if let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).first {
-                activate(app)
-            }
-        } else {
-            if let app = NSWorkspace.shared.runningApplications.first(where: { $0.localizedName == slot.appName }) {
-                activate(app)
-            }
+        if let app = matchingLayoutApplications(for: slot).first {
+            activate(app)
         }
     }
 
@@ -991,9 +985,10 @@ struct WindowManagementService {
         return app.activate(options: [.activateAllWindows])
     }
 
-    private func waitForLayoutWindowElements(slots: [SavedLayoutSlot], timeout: TimeInterval = 12) -> [UUID: LayoutWindowCandidate] {
+    private func waitForLayoutWindowElements(slots: [SavedLayoutSlot], timeout: TimeInterval = 18) -> [UUID: LayoutWindowCandidate] {
         let deadline = Date().addingTimeInterval(timeout)
         var latestMatches: [UUID: LayoutWindowCandidate] = [:]
+        var reopenedApplicationIDs = Set<String>()
 
         repeat {
             latestMatches = matchLayoutWindowElements(slots: slots)
@@ -1002,10 +997,52 @@ struct WindowManagementService {
                 return latestMatches
             }
 
-            Thread.sleep(forTimeInterval: 0.35)
+            refreshMissingLayoutApplications(
+                slots: slots,
+                matches: latestMatches,
+                reopenedApplicationIDs: &reopenedApplicationIDs
+            )
+            Thread.sleep(forTimeInterval: 0.45)
         } while Date() < deadline
 
         return latestMatches
+    }
+
+    private func refreshMissingLayoutApplications(
+        slots: [SavedLayoutSlot],
+        matches: [UUID: LayoutWindowCandidate],
+        reopenedApplicationIDs: inout Set<String>
+    ) {
+        let missingSlots = slots.filter { matches[$0.id] == nil }
+
+        for slot in missingSlots {
+            let matchingApps = matchingLayoutApplications(for: slot)
+
+            for app in matchingApps {
+                activate(app)
+
+                guard accessibilityWindowElements(for: app.processIdentifier).isEmpty else {
+                    continue
+                }
+
+                let appID = appIdentity(for: app)
+
+                guard reopenedApplicationIDs.insert(appID).inserted else {
+                    continue
+                }
+
+                let appURL = app.bundleURL ?? slot.bundleIdentifier.flatMap {
+                    NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0)
+                }
+
+                guard let appURL else {
+                    continue
+                }
+
+                _ = openApplication(at: appURL)
+                Thread.sleep(forTimeInterval: 0.3)
+            }
+        }
     }
 
     private func matchLayoutWindowElements(slots: [SavedLayoutSlot]) -> [UUID: LayoutWindowCandidate] {
@@ -1033,20 +1070,12 @@ struct WindowManagementService {
     }
 
     private func layoutWindowCandidates(for slot: SavedLayoutSlot) -> [LayoutWindowCandidate] {
-        let matchingApps = NSWorkspace.shared.runningApplications.filter { app in
-            guard app.activationPolicy == .regular else {
-                return false
-            }
-
-            if let bundleIdentifier = slot.bundleIdentifier, !bundleIdentifier.isEmpty {
-                return app.bundleIdentifier == bundleIdentifier
-            }
-
-            return app.localizedName == slot.appName
-        }
+        let matchingApps = matchingLayoutApplications(for: slot)
 
         return matchingApps.flatMap { app -> [LayoutWindowCandidate] in
-            accessibilityWindowElements(for: app.processIdentifier)
+            activate(app)
+
+            return accessibilityWindowElements(for: app.processIdentifier)
                 .enumerated()
                 .map { index, element in
                     LayoutWindowCandidate(
@@ -1056,6 +1085,20 @@ struct WindowManagementService {
                         element: element
                     )
                 }
+        }
+    }
+
+    private func matchingLayoutApplications(for slot: SavedLayoutSlot) -> [NSRunningApplication] {
+        NSWorkspace.shared.runningApplications.filter { app in
+            guard app.activationPolicy == .regular else {
+                return false
+            }
+
+            if let bundleIdentifier = slot.bundleIdentifier, !bundleIdentifier.isEmpty {
+                return app.bundleIdentifier == bundleIdentifier
+            }
+
+            return app.localizedName == slot.appName
         }
     }
 
