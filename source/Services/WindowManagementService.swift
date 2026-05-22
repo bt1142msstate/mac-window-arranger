@@ -339,14 +339,23 @@ struct WindowManagementService {
     func windowUnderMouse() -> WindowItem? {
         let mouseLocation = NSEvent.mouseLocation
         let windowListPoint = windowListPoint(from: mouseLocation)
-        let accessibilityCandidates = collectAccessibilityWindowCandidates()
-        let candidates = accessibilityCandidates.isEmpty ? collectVisibleWindowCandidates() : accessibilityCandidates
-
-        return candidates
+        let visibleCandidates = collectVisibleWindowCandidates()
+        let topVisibleCandidate = visibleCandidates
             .filter { $0.window.frame.contains(windowListPoint) }
-            .sorted(by: windowHitTestSort)
-            .first?
-            .window
+            .sorted(by: windowStackSort)
+            .first
+
+        guard let topVisibleCandidate else {
+            return nil
+        }
+
+        let accessibilityCandidates = collectAccessibilityWindowCandidates()
+        let matchingAccessibilityCandidate = accessibilityCandidates.first { candidate in
+            candidate.window.windowNumber != 0
+                && candidate.window.windowNumber == topVisibleCandidate.window.windowNumber
+        }
+
+        return matchingAccessibilityCandidate?.window ?? topVisibleCandidate.window
     }
 
     func appKitFrame(for window: WindowItem) -> CGRect? {
@@ -592,20 +601,7 @@ struct WindowManagementService {
         return lhs.id.localizedCaseInsensitiveCompare(rhs.id) == .orderedAscending
     }
 
-    private func windowHitTestSort(_ lhs: WindowItemCandidate, _ rhs: WindowItemCandidate) -> Bool {
-        let lhsFrame = lhs.window.frame
-        let rhsFrame = rhs.window.frame
-        let lhsArea = lhsFrame.positiveArea
-        let rhsArea = rhsFrame.positiveArea
-
-        if contains(lhsFrame, rhsFrame), lhsArea > rhsArea {
-            return false
-        }
-
-        if contains(rhsFrame, lhsFrame), rhsArea > lhsArea {
-            return true
-        }
-
+    private func windowStackSort(_ lhs: WindowItemCandidate, _ rhs: WindowItemCandidate) -> Bool {
         if let lhsOrder = lhs.order, let rhsOrder = rhs.order, lhsOrder != rhsOrder {
             return lhsOrder < rhsOrder
         }
@@ -618,20 +614,7 @@ struct WindowManagementService {
             return false
         }
 
-        if lhsArea != rhsArea {
-            return lhsArea < rhsArea
-        }
-
         return windowPickerSort(lhs.window, rhs.window)
-    }
-
-    private func contains(_ outerFrame: CGRect, _ innerFrame: CGRect) -> Bool {
-        let tolerance: CGFloat = 2
-
-        return innerFrame.minX >= outerFrame.minX - tolerance
-            && innerFrame.minY >= outerFrame.minY - tolerance
-            && innerFrame.maxX <= outerFrame.maxX + tolerance
-            && innerFrame.maxY <= outerFrame.maxY + tolerance
     }
 
     func currentVisibleWindowManagementFrame() -> CGRect? {
@@ -1573,14 +1556,4 @@ struct WindowManagementService {
         }
     }
 
-}
-
-private extension CGRect {
-    var positiveArea: CGFloat {
-        guard width > 0, height > 0 else {
-            return 0
-        }
-
-        return width * height
-    }
 }
