@@ -92,14 +92,23 @@ final class WindowPickerController {
             let window,
             let frame = service.appKitFrame(for: window)
         else {
+            updateFocusOverlay(for: nil)
             highlightPanel?.orderOut(nil)
             return
         }
 
+        updateFocusOverlay(for: frame)
         let panel = highlightPanel ?? makeHighlightPanel()
         highlightPanel = panel
+        (panel.contentView as? WindowPickerHighlightView)?.configure(for: window)
         panel.setFrame(frame.insetBy(dx: -4, dy: -4), display: true)
         panel.orderFrontRegardless()
+    }
+
+    private func updateFocusOverlay(for focusedFrame: CGRect?) {
+        for panel in capturePanels {
+            (panel.contentView as? WindowPickerCaptureView)?.focusedScreenFrame = focusedFrame
+        }
     }
 
     private func makeHighlightPanel() -> WindowPickerHighlightPanel {
@@ -219,6 +228,11 @@ final class WindowPickerHighlightPanel: NSPanel {
 
 final class WindowPickerCaptureView: NSView {
     weak var controller: WindowPickerController?
+    var focusedScreenFrame: CGRect? {
+        didSet {
+            needsDisplay = true
+        }
+    }
 
     override var acceptsFirstResponder: Bool {
         true
@@ -230,6 +244,38 @@ final class WindowPickerCaptureView: NSView {
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         self
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        NSColor.black.withAlphaComponent(0.18).setFill()
+        bounds.fill()
+
+        guard
+            let focusedScreenFrame,
+            let windowFrame = window?.frame
+        else {
+            return
+        }
+
+        let localFrame = CGRect(
+            x: focusedScreenFrame.minX - windowFrame.minX,
+            y: focusedScreenFrame.minY - windowFrame.minY,
+            width: focusedScreenFrame.width,
+            height: focusedScreenFrame.height
+        )
+            .insetBy(dx: -4, dy: -4)
+            .intersection(bounds)
+
+        guard !localFrame.isNull, localFrame.width > 0, localFrame.height > 0 else {
+            return
+        }
+
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current?.compositingOperation = .clear
+        NSBezierPath(roundedRect: localFrame, xRadius: 10, yRadius: 10).fill()
+        NSGraphicsContext.restoreGraphicsState()
     }
 
     override func viewDidMoveToWindow() {
@@ -280,6 +326,10 @@ final class WindowPickerCaptureView: NSView {
 }
 
 final class WindowPickerHighlightView: NSView {
+    private let badgeView = NSVisualEffectView()
+    private let iconView = NSImageView()
+    private let titleField = NSTextField(labelWithString: "")
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
@@ -287,9 +337,87 @@ final class WindowPickerHighlightView: NSView {
         layer?.borderColor = NSColor.controlAccentColor.cgColor
         layer?.borderWidth = 3
         layer?.cornerRadius = 8
+
+        badgeView.material = .hudWindow
+        badgeView.blendingMode = .withinWindow
+        badgeView.state = .active
+        badgeView.wantsLayer = true
+        badgeView.layer?.cornerRadius = 14
+        badgeView.layer?.borderColor = NSColor.white.withAlphaComponent(0.24).cgColor
+        badgeView.layer?.borderWidth = 1
+        addSubview(badgeView)
+
+        iconView.imageScaling = .scaleProportionallyUpOrDown
+        badgeView.addSubview(iconView)
+
+        titleField.font = .systemFont(ofSize: 13, weight: .semibold)
+        titleField.textColor = .white
+        titleField.lineBreakMode = .byTruncatingTail
+        titleField.maximumNumberOfLines = 1
+        badgeView.addSubview(titleField)
     }
 
     required init?(coder: NSCoder) {
         nil
+    }
+
+    func configure(for window: WindowItem) {
+        iconView.image = appIcon(
+            bundleIdentifier: window.bundleIdentifier,
+            appName: window.appName
+        )
+        titleField.stringValue = window.appName
+        needsLayout = true
+    }
+
+    override func layout() {
+        super.layout()
+
+        let badgeHeight: CGFloat = 28
+        let horizontalPadding: CGFloat = 10
+        let iconSize: CGFloat = 18
+        let spacing: CGFloat = 7
+        let preferredTextWidth = ceil(titleField.intrinsicContentSize.width)
+        let maximumBadgeWidth = max(min(bounds.width - 24, 260), 78)
+        let badgeWidth = min(
+            max(horizontalPadding * 2 + iconSize + spacing + preferredTextWidth, 92),
+            maximumBadgeWidth
+        )
+        let badgeX = (bounds.width - badgeWidth) / 2
+        let badgeY = max(bounds.height - badgeHeight - 10, 8)
+
+        badgeView.frame = CGRect(x: badgeX, y: badgeY, width: badgeWidth, height: badgeHeight)
+        iconView.frame = CGRect(
+            x: horizontalPadding,
+            y: (badgeHeight - iconSize) / 2,
+            width: iconSize,
+            height: iconSize
+        )
+        titleField.frame = CGRect(
+            x: horizontalPadding + iconSize + spacing,
+            y: 4,
+            width: max(badgeWidth - horizontalPadding * 2 - iconSize - spacing, 10),
+            height: badgeHeight - 8
+        )
+    }
+
+    private func appIcon(bundleIdentifier: String?, appName: String?) -> NSImage {
+        if
+            let bundleIdentifier,
+            !bundleIdentifier.isEmpty,
+            let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier)
+        {
+            return NSWorkspace.shared.icon(forFile: appURL.path)
+        }
+
+        if
+            let appName,
+            let runningApp = NSWorkspace.shared.runningApplications.first(where: { $0.localizedName == appName }),
+            let bundleURL = runningApp.bundleURL
+        {
+            return NSWorkspace.shared.icon(forFile: bundleURL.path)
+        }
+
+        return NSWorkspace.shared.icon(for: .applicationBundle)
     }
 }
