@@ -27,19 +27,16 @@ final class WindowPreviewCaptureService {
 
         let windowNumber = window.windowNumber
 
-        Task.detached(priority: .userInitiated) {
-            let image = await Self.capturePreview(
-                windowNumber: windowNumber,
-                displaySize: displaySize
-            )
+        Task(priority: .userInitiated) {
+            let image = await Self.capturePreviewImage(windowNumber: windowNumber)
 
             await MainActor.run {
-                completion(image)
+                completion(image.map { NSImage(cgImage: $0, size: displaySize) })
             }
         }
     }
 
-    private static func capturePreview(windowNumber: CGWindowID, displaySize: CGSize) async -> NSImage? {
+    private static func capturePreviewImage(windowNumber: CGWindowID) async -> CGImage? {
         do {
             let content = try await SCShareableContent.current
 
@@ -56,14 +53,11 @@ final class WindowPreviewCaptureService {
             configuration.scalesToFit = true
             configuration.preservesAspectRatio = true
             configuration.showsCursor = false
-            configuration.backgroundColor = NSColor.clear.cgColor
 
-            let image = try await SCScreenshotManager.captureImage(
+            return try await SCScreenshotManager.captureImage(
                 contentFilter: filter,
                 configuration: configuration
             )
-
-            return NSImage(cgImage: image, size: displaySize)
         } catch {
             return nil
         }
