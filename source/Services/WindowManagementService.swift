@@ -742,26 +742,38 @@ struct WindowManagementService {
         }
 
         var messages: [String] = []
+        var availableSlots: [SavedLayoutSlot] = []
 
         for slot in slots {
             if let launchMessage = openApplicationIfNeeded(for: slot) {
                 messages.append(launchMessage)
+            } else {
+                availableSlots.append(slot)
             }
+        }
+
+        guard !availableSlots.isEmpty else {
+            let detail = messages.isEmpty
+                ? "No saved windows are available in this layout."
+                : messages.joined(separator: "\n")
+            return "Failed: Could not arrange \"\(layout.name)\".\n\n" + detail
         }
 
         Thread.sleep(forTimeInterval: 0.7)
 
-        let matchedWindows = waitForLayoutWindowElements(slots: slots)
+        let matchedWindows = waitForLayoutWindowElements(slots: availableSlots)
         var successCount = 0
 
-        for slot in slots {
+        for slot in availableSlots {
+            let slotName = displayName(for: slot)
+
             guard let window = matchedWindows[slot.id] else {
-                messages.append("Failed to find a window for \(slot.appName).")
+                messages.append("Failed to find a window for \(slotName).")
                 continue
             }
 
             guard let frame = frames[safe: slot.position] else {
-                messages.append("Failed to find a saved position for \(slot.appName).")
+                messages.append("Failed to find a saved position for \(slotName).")
                 continue
             }
 
@@ -777,7 +789,7 @@ struct WindowManagementService {
             Thread.sleep(forTimeInterval: 0.12)
         }
 
-        if successCount == slots.count, messages.isEmpty {
+        if successCount == availableSlots.count, messages.isEmpty {
             return "Opened and arranged \"\(layout.name)\"."
         }
 
@@ -959,16 +971,18 @@ struct WindowManagementService {
     }
 
     private func openApplicationIfNeeded(for slot: SavedLayoutSlot) -> String? {
+        let slotName = displayName(for: slot)
+
         if let bundleIdentifier = slot.bundleIdentifier, !bundleIdentifier.isEmpty {
             let runningApps = matchingLayoutApplications(for: slot)
 
             if runningApps.isEmpty {
                 guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) else {
-                    return "Could not find \(slot.appName) on this Mac."
+                    return "Could not find \(slotName) on this Mac."
                 }
 
                 if let openError = openApplication(at: appURL).errorMessage {
-                    return "Could not open \(slot.appName): \(openError)"
+                    return "Could not open \(slotName): \(openError)"
                 }
             }
 
@@ -981,11 +995,25 @@ struct WindowManagementService {
         }
 
         if !isRunning {
-            return "Could not open \(slot.appName) because this saved layout does not include its bundle identifier. Re-save the layout to make it store-ready."
+            return "Could not open \(slotName) because this saved layout does not include its bundle identifier. Re-save the layout to make it store-ready."
         }
 
         activateApplication(for: slot)
         return nil
+    }
+
+    private func displayName(for slot: SavedLayoutSlot) -> String {
+        let appName = slot.appName.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if !appName.isEmpty {
+            return appName
+        }
+
+        if let bundleIdentifier = slot.bundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines), !bundleIdentifier.isEmpty {
+            return bundleIdentifier
+        }
+
+        return "this saved layout item"
     }
 
     private func openApplication(at appURL: URL) -> (application: NSRunningApplication?, errorMessage: String?) {
