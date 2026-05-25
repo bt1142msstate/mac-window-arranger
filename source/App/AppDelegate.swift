@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let compactLayoutService = WindowManagementService()
     private weak var mainWindow: NSWindow?
     private var fallbackMainWindow: NSWindow?
+    private var privacyPolicyWindow: NSWindow?
     private var lastExpandedMainWindowFrame: NSRect?
     private var isApplyingCompactLayout = false
     private var hasHandledAutomationURL = false
@@ -47,6 +48,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+
+    func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool {
+        false
+    }
+
+    @objc func showExpandedWindowFromMenu(_ sender: Any?) {
+        showExpandedWindow()
+    }
+
+    @objc func showMiniModeFromMenu(_ sender: Any?) {
+        showCompactStatus(message: "Ready to arrange windows.", kind: .neutral)
+    }
+
+    @objc func showPrivacyPolicyFromMenu(_ sender: Any?) {
+        showPrivacyPolicyWindow()
+    }
+
+    @objc func quitFromMenu(_ sender: Any?) {
+        NSApp.terminate(nil)
     }
 
     private func activateExistingInstanceIfNeeded() -> Bool {
@@ -338,24 +359,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func showLaunchMiniMode(attempt: Int = 0) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+    private func showLaunchMiniMode() {
+        DispatchQueue.main.async {
             guard !self.hasHandledAutomationURL else {
                 return
             }
 
-            let didShow = self.showCompactStatusIfPossible(
+            self.showCompactPanel(
                 message: "Ready to arrange windows.",
                 kind: .neutral,
-                centerMainWindowIfNeeded: true,
-                animated: false
+                on: NSScreen.main
             )
-
-            guard !didShow, attempt < 20 else {
-                return
-            }
-
-            self.showLaunchMiniMode(attempt: attempt + 1)
         }
     }
 
@@ -379,22 +393,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let showMiniMode = {
             window.orderOut(nil)
-            let layoutState = self.compactLayoutState()
-            self.compactPanelController.show(
+            self.showCompactPanel(
                 message: message,
                 kind: kind,
-                layoutTitle: layoutState.title,
-                layoutOptions: layoutState.options,
-                on: window.screen,
-                selectLayoutAction: { [weak self] layoutID in
-                    self?.applyCompactLayout(id: layoutID)
-                },
-                expandAction: { [weak self] in
-                    self?.restoreMainWindow()
-                },
-                quitAction: {
-                    NSApp.terminate(nil)
-                }
+                on: window.screen
             )
         }
 
@@ -413,6 +415,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             revealDestination: showMiniMode
         )
         return true
+    }
+
+    private func showCompactPanel(message: String, kind: ResizeStatusKind, on screen: NSScreen?) {
+        let layoutState = compactLayoutState()
+        compactPanelController.show(
+            message: message,
+            kind: kind,
+            layoutTitle: layoutState.title,
+            layoutOptions: layoutState.options,
+            on: screen,
+            selectLayoutAction: { [weak self] layoutID in
+                self?.applyCompactLayout(id: layoutID)
+            },
+            expandAction: { [weak self] in
+                self?.restoreMainWindow()
+            },
+            quitAction: {
+                NSApp.terminate(nil)
+            }
+        )
     }
 
     private func compactLayoutState() -> (title: String?, options: [CompactLayoutOption]) {
@@ -508,9 +530,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @discardableResult
     private func configureMainWindowIfNeeded(centerIfNeeded: Bool) -> NSWindow? {
         let window = mainWindow
-            ?? NSApp.windows.first { window in
-                !compactPanelController.owns(window) && !(window is NSPanel)
-            }
             ?? fallbackMainWindow
             ?? makeFallbackMainWindow()
 
@@ -539,6 +558,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.contentView = NSHostingView(rootView: ContentView())
         window.isReleasedWhenClosed = false
         fallbackMainWindow = window
+        return window
+    }
+
+    private func showPrivacyPolicyWindow() {
+        let window = privacyPolicyWindow ?? makePrivacyPolicyWindow()
+        privacyPolicyWindow = window
+
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
+    }
+
+    private func makePrivacyPolicyWindow() -> NSWindow {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 640, height: 620),
+            styleMask: [.titled, .closable, .miniaturizable],
+            backing: .buffered,
+            defer: false
+        )
+
+        window.title = "Privacy Policy"
+        window.contentView = NSHostingView(rootView: PrivacyPolicyView())
+        window.isReleasedWhenClosed = false
+        window.center()
         return window
     }
 

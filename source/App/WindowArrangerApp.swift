@@ -1,57 +1,80 @@
 import AppKit
-import SwiftUI
 
 @main
-struct WindowArrangerApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+enum WindowArrangerApp {
+    private static let appDelegate = AppDelegate()
 
-    var body: some Scene {
-        Settings {
-            EmptyView()
-        }
-        .commands {
-            WindowArrangerCommands()
-        }
-
-        Window("Privacy Policy", id: "privacy-policy") {
-            PrivacyPolicyView()
-        }
-        .windowResizability(.contentSize)
+    static func main() {
+        let app = NSApplication.shared
+        app.setActivationPolicy(.regular)
+        app.delegate = appDelegate
+        app.mainMenu = makeMainMenu()
+        app.run()
     }
-}
 
-struct WindowArrangerCommands: Commands {
-    var body: some Commands {
-        CommandGroup(replacing: .newItem) {}
-        CommandGroup(replacing: .appSettings) {}
+    private static func makeMainMenu() -> NSMenu {
+        let mainMenu = NSMenu()
 
-        CommandMenu("Window Arranger") {
-            Button("Show Window Arranger") {
-                AppDelegate.shared?.showExpandedWindow()
-            }
-            .keyboardShortcut("0", modifiers: [.command, .option])
+        let appMenuItem = NSMenuItem()
+        mainMenu.addItem(appMenuItem)
 
-            Button("Mini Mode") {
-                AppDelegate.shared?.showCompactStatus(
-                    message: "Ready to arrange windows.",
-                    kind: .neutral
-                )
-            }
-            .keyboardShortcut("m", modifiers: [.command, .option])
-        }
+        let appMenu = NSMenu(title: "Window Arranger")
+        appMenuItem.submenu = appMenu
 
-        WindowArrangerHelpCommands()
+        appMenu.addItem(
+            menuItem(
+                title: "Show Window Arranger",
+                action: #selector(AppDelegate.showExpandedWindowFromMenu(_:)),
+                keyEquivalent: "0",
+                modifiers: [.command, .option]
+            )
+        )
+        appMenu.addItem(
+            menuItem(
+                title: "Mini Mode",
+                action: #selector(AppDelegate.showMiniModeFromMenu(_:)),
+                keyEquivalent: "m",
+                modifiers: [.command, .option]
+            )
+        )
+        appMenu.addItem(.separator())
+        appMenu.addItem(
+            menuItem(
+                title: "Quit Window Arranger",
+                action: #selector(AppDelegate.quitFromMenu(_:)),
+                keyEquivalent: "q",
+                modifiers: [.command]
+            )
+        )
+
+        let helpMenuItem = NSMenuItem()
+        mainMenu.addItem(helpMenuItem)
+
+        let helpMenu = NSMenu(title: "Help")
+        helpMenuItem.submenu = helpMenu
+        NSApp.helpMenu = helpMenu
+
+        helpMenu.addItem(
+            menuItem(
+                title: "Window Arranger Privacy Policy",
+                action: #selector(AppDelegate.showPrivacyPolicyFromMenu(_:)),
+                keyEquivalent: "",
+                modifiers: []
+            )
+        )
+
+        return mainMenu
     }
-}
 
-struct WindowArrangerHelpCommands: Commands {
-    @Environment(\.openWindow) private var openWindow
-
-    var body: some Commands {
-        CommandGroup(after: .help) {
-            Button("Window Arranger Privacy Policy") {
-                openWindow(id: "privacy-policy")
-            }
-        }
+    private static func menuItem(
+        title: String,
+        action: Selector,
+        keyEquivalent: String,
+        modifiers: NSEvent.ModifierFlags
+    ) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: keyEquivalent)
+        item.target = appDelegate
+        item.keyEquivalentModifierMask = modifiers
+        return item
     }
 }
