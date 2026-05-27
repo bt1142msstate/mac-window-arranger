@@ -137,6 +137,12 @@ final class WindowArrangerStore {
             && !isPickingWindow
     }
 
+    var canAutoArrangeVisibleWindows: Bool {
+        hasAccessibilityAccess
+            && !isExecuting
+            && !isPickingWindow
+    }
+
     var selectedSavedLayout: SavedLayout? {
         savedLayouts.first { $0.id.uuidString == selectedLayoutID }
     }
@@ -553,6 +559,55 @@ final class WindowArrangerStore {
                 windows: windows,
                 frames: frames,
                 successMessage: "Arranged \(windows.count) window(s) using \(layoutKind.title)."
+            )
+
+            DispatchQueue.main.async {
+                if self.statusKind(for: resultMessage) != .error {
+                    self.selectedLayoutID = ""
+                }
+                self.finishWindowAction(with: resultMessage)
+                self.loadAvailableWindows(preserveSelection: true)
+            }
+        }
+    }
+
+    func autoArrangeVisibleWindows() {
+        guard hasAccessibilityAccess else {
+            resultKind = .error
+            executionResult = "Grant Accessibility access before arranging visible windows."
+            return
+        }
+
+        guard !isExecuting, !isPickingWindow else {
+            return
+        }
+
+        let windows = service.collectAvailableWindows()
+
+        guard !windows.isEmpty else {
+            resultKind = .error
+            executionResult = "No visible app windows were found to arrange."
+            return
+        }
+
+        let frames = service.nonOverlappingFrames(forVisibleWindowCount: windows.count)
+
+        guard frames.count == windows.count else {
+            resultKind = .error
+            executionResult = "Could not read the current screen size."
+            return
+        }
+
+        availableWindows = windows
+        isExecuting = true
+        resultKind = .neutral
+        executionResult = "Arranging \(windows.count) visible window(s)..."
+
+        DispatchQueue.global(qos: .userInitiated).async { [service] in
+            let resultMessage = service.performLayoutArrangement(
+                windows: windows,
+                frames: frames,
+                successMessage: "Arranged \(windows.count) visible window(s) so they do not overlap."
             )
 
             DispatchQueue.main.async {

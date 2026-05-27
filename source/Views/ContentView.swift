@@ -1020,11 +1020,20 @@ private struct LayoutBuilderSection: View {
 
                     Spacer()
 
+                    Button(action: store.autoArrangeVisibleWindows) {
+                        Label("Auto Arrange", systemImage: "square.grid.2x2")
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(!store.canAutoArrangeVisibleWindows)
+                    .accessibilityLabel("Auto Arrange")
+                    .help("Arrange visible app windows so they do not overlap.")
+
                     Button(action: store.executeThreeWaySplit) {
                         Label("Arrange Selected", systemImage: store.selectedLayoutKind.symbolName)
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(!store.canSplitSelectedWindows)
+                    .accessibilityLabel("Arrange Selected")
                 }
             }
         }

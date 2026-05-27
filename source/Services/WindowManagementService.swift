@@ -730,6 +730,29 @@ struct WindowManagementService {
         }
     }
 
+    func nonOverlappingFrames(forVisibleWindowCount count: Int) -> [CGRect] {
+        guard let visibleFrame = currentVisibleWindowManagementFrame(), count > 0 else {
+            return []
+        }
+
+        switch count {
+        case 1:
+            return [visibleFrame.roundedForWindowManagement()]
+        case 2:
+            return columnFrames(count: 2, in: visibleFrame)
+        case 3:
+            return frames(for: .focusStack)
+        case 4:
+            return gridFrames(columns: 2, rows: 2, in: visibleFrame)
+        default:
+            let dimensions = adaptiveGridDimensions(for: count, in: visibleFrame)
+            return Array(
+                gridFrames(columns: dimensions.columns, rows: dimensions.rows, in: visibleFrame)
+                    .prefix(count)
+            )
+        }
+    }
+
     func openAndArrange(layout: SavedLayout, frames: [CGRect]) -> String {
         let slots = layout.slots.sorted { $0.position < $1.position }
 
@@ -1577,6 +1600,18 @@ struct WindowManagementService {
         }
 
         return frames
+    }
+
+    private func adaptiveGridDimensions(for count: Int, in visibleFrame: CGRect) -> (columns: Int, rows: Int) {
+        let safeCount = max(count, 1)
+        let aspectRatio = max(Double(visibleFrame.width / max(visibleFrame.height, 1)), 0.5)
+        let columns = min(
+            safeCount,
+            max(1, Int(ceil(sqrt(Double(safeCount) * aspectRatio))))
+        )
+        let rows = max(1, Int(ceil(Double(safeCount) / Double(columns))))
+
+        return (columns, rows)
     }
 
     private func windowListPoint(from appKitPoint: CGPoint) -> CGPoint {
