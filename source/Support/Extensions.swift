@@ -32,6 +32,10 @@ extension Collection {
     }
 }
 
+extension Notification.Name {
+    static let windowArrangerCheckForUpdatesRequested = Notification.Name("WindowArrangerCheckForUpdatesRequested")
+}
+
 extension CGRect {
     func roundedForWindowManagement() -> CGRect {
         CGRect(

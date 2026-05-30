@@ -31,11 +31,13 @@ final class WindowArrangerStore {
     var layoutName = "Work Layout"
     var selectedLayoutKind: LayoutKind = .threeColumns
     var customLayoutWindowCount = 3
+    var updateStatus: AppUpdateStatus = .idle
 
     let customLayoutWindowRange = 1...8
 
     private let workflowModeDefaultsKey = "selectedWorkflowMode.v1"
     private let service = WindowManagementService()
+    private let updateService = AppUpdateService()
 
     init() {
         hasAccessibilityAccess = service.hasAccessibilityAccess()
@@ -143,6 +145,15 @@ final class WindowArrangerStore {
             && !isPickingWindow
     }
 
+    var showsUpdateBanner: Bool {
+        switch updateStatus {
+        case .idle:
+            return false
+        case .checking, .upToDate, .available, .downloading, .downloaded, .failed:
+            return true
+        }
+    }
+
     var selectedSavedLayout: SavedLayout? {
         savedLayouts.first { $0.id.uuidString == selectedLayoutID }
     }
@@ -194,6 +205,8 @@ final class WindowArrangerStore {
         loadSavedLayouts()
         loadRunningApps()
         refreshAccessibilityAccess()
+        loadCachedAvailableUpdate()
+        checkForUpdatesIfNeeded()
     }
 
     func compactToDock() {
@@ -532,6 +545,51 @@ final class WindowArrangerStore {
         service.openAccessibilitySettings()
     }
 
+    func checkForUpdates() {
+        checkForUpdates(isAutomatic: false)
+    }
+
+    func checkForUpdatesIfNeeded() {
+        loadCachedAvailableUpdate()
+
+        guard updateService.shouldRunAutomaticCheck() else {
+            return
+        }
+
+        checkForUpdates(isAutomatic: true)
+    }
+
+    func downloadAvailableUpdate() {
+        guard let update = activeUpdate else {
+            return
+        }
+
+        updateStatus = .downloading(update)
+
+        updateService.downloadAndOpen(update: update) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let url):
+                    self.updateStatus = .downloaded(update, url)
+                case .failure(let error):
+                    self.updateStatus = .failed(self.updateErrorMessage(error))
+                }
+            }
+        }
+    }
+
+    func openAvailableUpdateReleasePage() {
+        guard let update = activeUpdate else {
+            return
+        }
+
+        updateService.openReleasePage(for: update)
+    }
+
+    func dismissUpdateStatus() {
+        updateStatus = .idle
+    }
+
     func executeThreeWaySplit() {
         let windows = selectedSplitWindows
 
@@ -758,6 +816,81 @@ final class WindowArrangerStore {
 
     private func compactToDock(message: String, kind: ResizeStatusKind) {
         AppDelegate.shared?.showCompactStatus(message: message, kind: kind)
+    }
+
+    private var activeUpdate: AppUpdate? {
+        switch updateStatus {
+        case .available(let update), .downloading(let update), .downloaded(let update, _):
+            return update
+        case .idle, .checking, .upToDate, .failed:
+            return nil
+        }
+    }
+
+    private func loadCachedAvailableUpdate() {
+        guard let update = updateService.cachedAvailableUpdate() else {
+            return
+        }
+
+        updateStatus = .available(update)
+    }
+
+    private func checkForUpdates(isAutomatic: Bool) {
+        switch updateStatus {
+        case .checking, .downloading:
+            return
+        case .idle, .upToDate, .available, .downloaded, .failed:
+            break
+        }
+
+        if !isAutomatic {
+            updateStatus = .checking
+        }
+
+        updateService.checkForUpdate { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let checkResult):
+                    self.updateService.markAutomaticCheckCompleted()
+
+                    switch checkResult {
+                    case .upToDate(let version):
+                        self.updateStatus = isAutomatic ? .idle : .upToDate(version: version)
+                    case .updateAvailable(let update):
+                        self.updateStatus = .available(update)
+                    }
+                case .failure(let error):
+                    if isAutomatic {
+                        if self.shouldMarkUpdateCheckCompleted(for: error) {
+                            self.updateService.markAutomaticCheckCompleted()
+                        }
+
+                        self.updateStatus = self.updateService.cachedAvailableUpdate().map(AppUpdateStatus.available) ?? .idle
+                    } else {
+                        self.updateStatus = .failed(self.updateErrorMessage(error))
+                    }
+                }
+            }
+        }
+    }
+
+    private func updateErrorMessage(_ error: Error) -> String {
+        if let localizedError = error as? LocalizedError, let message = localizedError.errorDescription {
+            return message
+        }
+
+        return error.localizedDescription
+    }
+
+    private func shouldMarkUpdateCheckCompleted(for error: Error) -> Bool {
+        guard
+            let updateError = error as? AppUpdateServiceError,
+            case .noRelease = updateError
+        else {
+            return false
+        }
+
+        return true
     }
 
     private func statusKind(for message: String) -> ResizeStatusKind {

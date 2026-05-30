@@ -19,6 +19,16 @@ struct ContentView: View {
                     )
                 }
 
+                if store.showsUpdateBanner {
+                    UpdateBanner(
+                        status: store.updateStatus,
+                        checkAction: store.checkForUpdates,
+                        downloadAction: store.downloadAvailableUpdate,
+                        releaseNotesAction: store.openAvailableUpdateReleasePage,
+                        dismissAction: store.dismissUpdateStatus
+                    )
+                }
+
                 switch store.workflowMode {
                 case .resize:
                     ResizeWorkflowSection(store: store)
@@ -61,6 +71,9 @@ struct ContentView: View {
         .onReceive(appRefreshTimer) { _ in
             store.refreshAccessibilityAccess()
             store.loadRunningApps(preserveSelection: true)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .windowArrangerCheckForUpdatesRequested)) { _ in
+            store.checkForUpdates()
         }
         .onChange(of: store.selectedLayoutID) { _, _ in
             store.syncSelectedLayoutMetadata()

@@ -27,6 +27,7 @@ Mac Window Arranger is a small native macOS SwiftUI utility for resizing and arr
 - Restore minimized saved-layout windows before arranging them.
 - Start in Mini Mode, switch saved layouts from the compact control, and return to a small Dock-adjacent control after successful actions.
 - Call the app from Shortcuts, scripts, launchers, or other macOS apps with the `window-arranger://` URL scheme.
+- Check GitHub releases automatically and download/open the latest DMG from inside the app.
 - Preserve local Accessibility permission across rebuilds with stable signing metadata.
 
 ## Current Status
@@ -34,6 +35,7 @@ Mac Window Arranger is a small native macOS SwiftUI utility for resizing and arr
 - Built as a local signed, hardened-runtime universal macOS app (`arm64` and `x86_64`).
 - Installed by the build script at `/Applications/Window Arranger.app`.
 - Privacy manifest is bundled at `Contents/Resources/PrivacyInfo.xcprivacy`.
+- Direct-download builds include GitHub release update checks with a one-click DMG download/open flow.
 - Planned public release: low-cost paid Mac App Store version, likely around $2 to $4, to support continued development.
 - Current App Store blocker: App Sandbox is intentionally disabled because sandboxed builds cannot access other apps' windows through Accessibility. Developer ID signing plus notarization is the fallback path while that blocker is unresolved.
 
@@ -63,6 +65,12 @@ On first use, grant Accessibility permission in System Settings so the app can r
 GitHub checkouts include a ready-made drag-to-Applications disk image at [`dist/Window Arranger.dmg`](dist/Window%20Arranger.dmg). Open the DMG, drag `Window Arranger.app` into `/Applications`, then grant Accessibility permission on first launch.
 
 The bundled DMG is signed for local validation. Public direct-download releases should be rebuilt with a Developer ID Application certificate and notarized before distribution.
+
+## Updates
+
+Direct-download builds check the latest GitHub Release once per day and cache any available update. You can also use Help > Check for Updates or `window-arranger://check-updates`. When a newer release has a DMG asset, the in-app Download button saves it to Downloads and opens it.
+
+Mac App Store builds should disable the GitHub update check and use Apple's App Store update flow.
 
 ## App Icon
 
@@ -102,6 +110,7 @@ open "window-arranger://apply-layout?name=Work%20Layout"
 open "window-arranger://apply-layout?id=LAYOUT-UUID"
 open "window-arranger://resize?app=Safari&width=1280&height=720"
 open "window-arranger://resize?bundle=com.apple.Safari&width=1440&height=900&all=1"
+open "window-arranger://check-updates"
 ```
 
 URL calls are one-way macOS launch events, so status appears in Window Arranger or Mini Mode instead of stdout. Layout and resize actions still require Accessibility permission.
@@ -118,7 +127,7 @@ Local DMGs are signed with the stable local signing identity so they validate on
 
 ## Privacy
 
-Mac Window Arranger does not collect analytics, tracking data, or network data. It reads the local list of running apps and window titles so you can select windows to arrange. Optional Screen Recording access is used only while picking a window so overlapping windows can appear translucent over the highlighted target. Saved layouts stay on this Mac in app preferences. See [docs/PRIVACY.md](docs/PRIVACY.md).
+Mac Window Arranger does not collect analytics, tracking data, or window data. It reads the local list of running apps and window titles so you can select windows to arrange. Direct-download builds contact GitHub's latest-release endpoint to check for updates and download the release DMG; window titles, saved layouts, and app selections are not sent. Optional Screen Recording access is used only while picking a window so overlapping windows can appear translucent over the highlighted target. Saved layouts stay on this Mac in app preferences. See [docs/PRIVACY.md](docs/PRIVACY.md).
 
 ## Signing
 

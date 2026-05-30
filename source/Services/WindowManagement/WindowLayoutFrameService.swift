@@ -32,10 +32,8 @@ struct WindowLayoutFrameService {
         switch count {
         case 1:
             return [visibleFrame.roundedForWindowManagement()]
-        case 2:
-            return columnFrames(count: 2, in: visibleFrame)
-        case 3:
-            return frames(for: .focusStack, in: visibleFrame)
+        case 2...3:
+            return columnFrames(count: count, in: visibleFrame)
         case 4:
             return gridFrames(columns: 2, rows: 2, in: visibleFrame)
         default:

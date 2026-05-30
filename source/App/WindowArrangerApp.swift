@@ -56,6 +56,15 @@ enum WindowArrangerApp {
 
         helpMenu.addItem(
             menuItem(
+                title: "Check for Updates...",
+                action: #selector(AppDelegate.checkForUpdatesFromMenu(_:)),
+                keyEquivalent: "",
+                modifiers: []
+            )
+        )
+        helpMenu.addItem(.separator())
+        helpMenu.addItem(
+            menuItem(
                 title: "Window Arranger Privacy Policy",
                 action: #selector(AppDelegate.showPrivacyPolicyFromMenu(_:)),
                 keyEquivalent: "",

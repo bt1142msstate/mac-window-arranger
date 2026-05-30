@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let transitionCoordinator = WindowTransitionCoordinator()
     private let mainWindowBoundaryController = MainWindowBoundaryController()
     private let compactLayoutService = WindowManagementService()
+    private let appUpdateService = AppUpdateService()
     private weak var mainWindow: NSWindow?
     private var fallbackMainWindow: NSWindow?
     private var privacyPolicyWindow: NSWindow?
@@ -37,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         showLaunchMiniMode()
+        checkForUpdatesAtLaunchIfNeeded()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -64,6 +66,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func showPrivacyPolicyFromMenu(_ sender: Any?) {
         showPrivacyPolicyWindow()
+    }
+
+    @objc func checkForUpdatesFromMenu(_ sender: Any?) {
+        requestUpdateCheck()
     }
 
     @objc func quitFromMenu(_ sender: Any?) {
@@ -225,6 +231,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             applyAutomationLayout(components: components, url: url)
         case "resize":
             performAutomationResize(components: components)
+        case "check-updates", "updates":
+            requestUpdateCheck()
         case "accessibility", "settings":
             compactLayoutService.openAccessibilitySettings()
         default:
@@ -371,6 +379,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 on: NSScreen.main
             )
         }
+    }
+
+    private func requestUpdateCheck() {
+        showExpandedWindow()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            NotificationCenter.default.post(name: .windowArrangerCheckForUpdatesRequested, object: nil)
+        }
+    }
+
+    private func checkForUpdatesAtLaunchIfNeeded() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            guard !self.hasHandledAutomationURL, self.appUpdateService.shouldRunAutomaticCheck() else {
+                return
+            }
+
+            self.appUpdateService.checkForUpdate { [weak self] result in
+                DispatchQueue.main.async {
+                    guard let self else {
+                        return
+                    }
+
+                    guard case .success(let checkResult) = result else {
+                        if self.isMissingReleaseResult(result) {
+                            self.appUpdateService.markAutomaticCheckCompleted()
+                        }
+                        return
+                    }
+
+                    self.appUpdateService.markAutomaticCheckCompleted()
+
+                    guard case .updateAvailable(let update) = checkResult else {
+                        return
+                    }
+
+                    self.showCompactStatus(message: "Update \(update.version) is available.", kind: .warning)
+                }
+            }
+        }
+    }
+
+    private func isMissingReleaseResult(_ result: Result<AppUpdateCheckResult, Error>) -> Bool {
+        guard
+            case .failure(let error) = result,
+            let updateError = error as? AppUpdateServiceError,
+            case .noRelease = updateError
+        else {
+            return false
+        }
+
+        return true
     }
 
     @discardableResult
