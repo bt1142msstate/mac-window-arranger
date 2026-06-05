@@ -27,7 +27,7 @@ Mac Window Arranger is a small native macOS SwiftUI utility for resizing and arr
 - Restore minimized saved-layout windows before arranging them.
 - Start in Mini Mode, switch saved layouts from the compact control, and return to a small Dock-adjacent control after successful actions.
 - Call the app from Shortcuts, scripts, launchers, or other macOS apps with the `window-arranger://` URL scheme.
-- Check GitHub releases automatically and download/open the latest DMG from inside the app.
+- Check GitHub releases automatically, view latest release notes from the expanded toolbar, and download/open the latest DMG from inside the app.
 - Preserve local Accessibility permission across rebuilds with stable signing metadata.
 
 ## Current Status
@@ -68,7 +68,7 @@ The bundled DMG is signed for local validation. Public direct-download releases 
 
 ## Updates
 
-Direct-download builds check the latest GitHub Release once per day and cache any available update. You can also use Help > Check for Updates or `window-arranger://check-updates`. When a newer release has a DMG asset, the in-app Download button saves it to Downloads and opens it.
+Direct-download builds check the latest GitHub Release once per day and cache any available update. You can also use the expanded toolbar update icon, Help > Check for Updates, or `window-arranger://check-updates`. The expanded toolbar popover shows the installed version, latest release version, and GitHub release notes. When a newer release has a DMG asset, the in-app Download button saves it to Downloads and opens it.
 
 Mac App Store builds should disable the GitHub update check and use Apple's App Store update flow.
 

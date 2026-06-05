@@ -116,7 +116,7 @@ struct UpdateBanner: View {
         switch status {
         case .idle, .checking:
             return nil
-        case .upToDate(let version):
+        case .upToDate(let version, _):
             return "Installed version \(version)."
         case .available(let update):
             return update.assetName ?? "Open the latest GitHub release."

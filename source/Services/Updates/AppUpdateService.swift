@@ -5,12 +5,14 @@ final class AppUpdateService {
     private struct GitHubReleaseResponse: Decodable {
         let tagName: String
         let name: String?
+        let body: String?
         let htmlURL: URL
         let assets: [GitHubReleaseAsset]
 
         private enum CodingKeys: String, CodingKey {
             case tagName = "tag_name"
             case name
+            case body
             case htmlURL = "html_url"
             case assets
         }
@@ -18,11 +20,21 @@ final class AppUpdateService {
 
     private struct GitHubReleaseAsset: Decodable {
         let name: String
+        let label: String?
         let browserDownloadURL: URL
         let contentType: String?
 
+        var displayName: String {
+            guard let label, !label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return name
+            }
+
+            return label
+        }
+
         private enum CodingKeys: String, CodingKey {
             case name
+            case label
             case browserDownloadURL = "browser_download_url"
             case contentType = "content_type"
         }
@@ -171,7 +183,7 @@ final class AppUpdateService {
                     completion(.success(.updateAvailable(update)))
                 } else {
                     self.clearCachedAvailableUpdate()
-                    completion(.success(.upToDate(currentVersion: self.currentVersionDisplay)))
+                    completion(.success(.upToDate(currentVersion: self.currentVersionDisplay, latestUpdate: update)))
                 }
             } catch {
                 completion(.failure(error))
@@ -255,8 +267,9 @@ final class AppUpdateService {
             tagName: release.tagName,
             releaseURL: release.htmlURL,
             assetDownloadURL: asset?.browserDownloadURL,
-            assetName: asset?.name,
-            releaseTitle: release.name
+            assetName: asset?.displayName,
+            releaseTitle: release.name,
+            releaseNotes: release.body
         )
     }
 

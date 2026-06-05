@@ -32,6 +32,7 @@ final class WindowArrangerStore {
     var selectedLayoutKind: LayoutKind = .threeColumns
     var customLayoutWindowCount = 3
     var updateStatus: AppUpdateStatus = .idle
+    var latestUpdate: AppUpdate?
 
     let customLayoutWindowRange = 1...8
 
@@ -152,6 +153,10 @@ final class WindowArrangerStore {
         case .checking, .upToDate, .available, .downloading, .downloaded, .failed:
             return true
         }
+    }
+
+    var installedVersionDisplay: String {
+        updateService.currentVersionDisplay
     }
 
     var selectedSavedLayout: SavedLayout? {
@@ -586,6 +591,14 @@ final class WindowArrangerStore {
         updateService.openReleasePage(for: update)
     }
 
+    func openLatestUpdateReleasePage() {
+        guard let update = latestUpdate ?? activeUpdate else {
+            return
+        }
+
+        updateService.openReleasePage(for: update)
+    }
+
     func dismissUpdateStatus() {
         updateStatus = .idle
     }
@@ -832,6 +845,7 @@ final class WindowArrangerStore {
             return
         }
 
+        latestUpdate = update
         updateStatus = .available(update)
     }
 
@@ -854,9 +868,13 @@ final class WindowArrangerStore {
                     self.updateService.markAutomaticCheckCompleted()
 
                     switch checkResult {
-                    case .upToDate(let version):
-                        self.updateStatus = isAutomatic ? .idle : .upToDate(version: version)
+                    case .upToDate(let version, let latestUpdate):
+                        self.latestUpdate = latestUpdate
+                        self.updateStatus = isAutomatic
+                            ? .idle
+                            : .upToDate(version: version, latestUpdate: latestUpdate)
                     case .updateAvailable(let update):
+                        self.latestUpdate = update
                         self.updateStatus = .available(update)
                     }
                 case .failure(let error):

@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ContentView: View {
     @State private var store = WindowArrangerStore()
+    @State private var showsUpdateDetails = false
 
     private let appRefreshTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
 
@@ -48,6 +49,27 @@ struct ContentView: View {
             }
 
             ToolbarItem {
+                Button {
+                    showsUpdateDetails = true
+                    store.checkForUpdates()
+                } label: {
+                    Label("Updates", systemImage: updateToolbarSymbolName(for: store.updateStatus))
+                }
+                .labelStyle(.iconOnly)
+                .help("Check for updates")
+                .popover(isPresented: $showsUpdateDetails, arrowEdge: .top) {
+                    UpdateDetailsPopover(
+                        status: store.updateStatus,
+                        installedVersion: store.installedVersionDisplay,
+                        latestUpdate: store.latestUpdate,
+                        checkAction: store.checkForUpdates,
+                        downloadAction: store.downloadAvailableUpdate,
+                        releaseNotesAction: store.openLatestUpdateReleasePage
+                    )
+                }
+            }
+
+            ToolbarItem {
                 Button(action: store.compactToDock) {
                     Label("Mini Mode", systemImage: "minus.rectangle")
                 }
@@ -87,6 +109,19 @@ struct ContentView: View {
         .animation(.snappy(duration: 0.18), value: store.selectedPreset)
         .animation(.snappy(duration: 0.18), value: store.executionResult.isEmpty)
         .animation(.snappy(duration: 0.18), value: store.availableWindows.count)
+    }
+
+    private func updateToolbarSymbolName(for status: AppUpdateStatus) -> String {
+        switch status {
+        case .available:
+            return "arrow.down.circle.fill"
+        case .upToDate, .downloaded:
+            return "checkmark.circle"
+        case .failed:
+            return "exclamationmark.triangle"
+        case .idle, .checking, .downloading:
+            return "arrow.triangle.2.circlepath"
+        }
     }
 }
 
