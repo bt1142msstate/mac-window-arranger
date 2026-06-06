@@ -26,11 +26,13 @@ struct PrivacyPolicyView: View {
 
                 Text("Screen Recording permission is optional and is used only while choosing a window, so overlapping foreground windows can appear translucent over the highlighted target. Screen contents are not stored or transmitted.")
 
-                Text("The app does not use analytics, advertising, tracking, or network services.")
+                Text("Direct-download builds contact GitHub to check for updates and can open GitHub issue-reporting pages when you choose to report an issue. Issue diagnostics are copied only when you choose and do not include window titles, saved layouts, app names, screenshots, or screen contents.")
+
+                Text("The app does not use analytics, advertising, or tracking.")
             }
             .fixedSize(horizontal: false, vertical: true)
 
-            Text("Last updated: May 22, 2026")
+            Text("Last updated: June 6, 2026")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

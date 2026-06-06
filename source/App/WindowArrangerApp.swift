@@ -62,6 +62,14 @@ enum WindowArrangerApp {
                 modifiers: []
             )
         )
+        helpMenu.addItem(
+            menuItem(
+                title: "Report an Issue...",
+                action: #selector(AppDelegate.reportIssueFromMenu(_:)),
+                keyEquivalent: "",
+                modifiers: []
+            )
+        )
         helpMenu.addItem(.separator())
         helpMenu.addItem(
             menuItem(

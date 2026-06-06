@@ -28,6 +28,7 @@ Mac Window Arranger is a small native macOS SwiftUI utility for resizing and arr
 - Start in Mini Mode, switch saved layouts from the compact control, and return to a small Dock-adjacent control after successful actions.
 - Call the app from Shortcuts, scripts, launchers, or other macOS apps with the `window-arranger://` URL scheme.
 - Check GitHub releases automatically, view latest release notes from the expanded toolbar, and download/open the latest DMG from inside the app.
+- Report bugs, request features, or ask questions from Help > Report an Issue with a safe diagnostics copy button.
 - Preserve local Accessibility permission across rebuilds with stable signing metadata.
 
 ## Current Status
@@ -72,6 +73,10 @@ Direct-download builds check the latest GitHub Release once per day and cache an
 
 Mac App Store builds should disable the GitHub update check and use Apple's App Store update flow.
 
+## Issue Reporting
+
+Use Help > Report an Issue or `window-arranger://report-issue` to open the in-app issue reporter. It can open GitHub bug, feature, and question templates and copy safe diagnostics for pasting into an issue. Diagnostics include app version, build, macOS version, architecture, and permission status; they do not include window titles, saved layouts, app names, or screenshots.
+
 ## App Icon
 
 <p>
@@ -111,6 +116,7 @@ open "window-arranger://apply-layout?id=LAYOUT-UUID"
 open "window-arranger://resize?app=Safari&width=1280&height=720"
 open "window-arranger://resize?bundle=com.apple.Safari&width=1440&height=900&all=1"
 open "window-arranger://check-updates"
+open "window-arranger://report-issue"
 ```
 
 URL calls are one-way macOS launch events, so status appears in Window Arranger or Mini Mode instead of stdout. Layout and resize actions still require Accessibility permission.
@@ -127,7 +133,7 @@ Local DMGs are signed with the stable local signing identity so they validate on
 
 ## Privacy
 
-Mac Window Arranger does not collect analytics, tracking data, or window data. It reads the local list of running apps and window titles so you can select windows to arrange. Direct-download builds contact GitHub's latest-release endpoint to check for updates and download the release DMG; window titles, saved layouts, and app selections are not sent. Optional Screen Recording access is used only while picking a window so overlapping windows can appear translucent over the highlighted target. Saved layouts stay on this Mac in app preferences. See [docs/PRIVACY.md](docs/PRIVACY.md).
+Mac Window Arranger does not collect analytics, tracking data, or window data. It reads the local list of running apps and window titles so you can select windows to arrange. Direct-download builds contact GitHub's latest-release endpoint to check for updates and can open GitHub issue-reporting pages when you choose to report an issue; window titles, saved layouts, and app selections are not sent. Optional Screen Recording access is used only while picking a window so overlapping windows can appear translucent over the highlighted target. Saved layouts stay on this Mac in app preferences. See [docs/PRIVACY.md](docs/PRIVACY.md).
 
 ## Signing
 

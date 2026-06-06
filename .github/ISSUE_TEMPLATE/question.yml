@@ -1,0 +1,22 @@
+name: Question
+description: Ask for help using, installing, or automating Window Arranger.
+title: "Question: "
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What are you trying to figure out?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Include what you tried and what happened.
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Safe diagnostics, if relevant
+      description: In Window Arranger, choose Help > Report an Issue, copy diagnostics, and paste them here if the question depends on your Mac/app version.
+      render: text

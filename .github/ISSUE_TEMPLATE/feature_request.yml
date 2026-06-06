@@ -1,0 +1,29 @@
+name: Feature Request
+description: Suggest an improvement or workflow you would like Window Arranger to support.
+title: "Feature: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What workflow would this improve?
+      description: Describe the situation or friction that led to the request.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What should Window Arranger do?
+      description: Describe the behavior, UI, or automation you want.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Mention any workaround or alternate design you have thought about.
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Safe diagnostics, if relevant
+      description: In Window Arranger, choose Help > Report an Issue, copy diagnostics, and paste them here if the request depends on your Mac/app version.
+      render: text

@@ -10,9 +10,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let mainWindowBoundaryController = MainWindowBoundaryController()
     private let compactLayoutService = WindowManagementService()
     private let appUpdateService = AppUpdateService()
+    private let issueReportService = IssueReportService()
     private weak var mainWindow: NSWindow?
     private var fallbackMainWindow: NSWindow?
     private var privacyPolicyWindow: NSWindow?
+    private var issueReportWindow: NSWindow?
     private var lastExpandedMainWindowFrame: NSRect?
     private var isApplyingCompactLayout = false
     private var hasHandledAutomationURL = false
@@ -70,6 +72,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func checkForUpdatesFromMenu(_ sender: Any?) {
         requestUpdateCheck()
+    }
+
+    @objc func reportIssueFromMenu(_ sender: Any?) {
+        showIssueReportWindow()
     }
 
     @objc func quitFromMenu(_ sender: Any?) {
@@ -233,6 +239,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             performAutomationResize(components: components)
         case "check-updates", "updates":
             requestUpdateCheck()
+        case "report-issue", "issue", "support":
+            showIssueReportWindow()
         case "accessibility", "settings":
             compactLayoutService.openAccessibilitySettings()
         default:
@@ -629,6 +637,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.orderFrontRegardless()
     }
 
+    private func showIssueReportWindow() {
+        let window = issueReportWindow ?? makeIssueReportWindow()
+        issueReportWindow = window
+
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
+    }
+
     private func makePrivacyPolicyWindow() -> NSWindow {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 640, height: 620),
@@ -642,6 +659,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.isReleasedWhenClosed = false
         window.center()
         return window
+    }
+
+    private func makeIssueReportWindow() -> NSWindow {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 620, height: 460),
+            styleMask: [.titled, .closable, .miniaturizable],
+            backing: .buffered,
+            defer: false
+        )
+
+        window.title = "Report an Issue"
+        window.contentView = NSHostingView(
+            rootView: IssueReportView(
+                diagnostics: issueReportService.diagnostics,
+                reportBugAction: { [weak self] in
+                    self?.copyDiagnosticsAndOpenReport(kind: .bug)
+                },
+                requestFeatureAction: { [weak self] in
+                    self?.copyDiagnosticsAndOpenReport(kind: .feature)
+                },
+                askQuestionAction: { [weak self] in
+                    self?.copyDiagnosticsAndOpenReport(kind: .question)
+                },
+                openIssuesAction: { [weak self] in
+                    self?.issueReportService.openIssuesList()
+                },
+                copyDiagnosticsAction: { [weak self] in
+                    self?.issueReportService.copyDiagnosticsToPasteboard()
+                }
+            )
+        )
+        window.isReleasedWhenClosed = false
+        window.center()
+        return window
+    }
+
+    private func copyDiagnosticsAndOpenReport(kind: IssueReportKind) {
+        issueReportService.copyDiagnosticsToPasteboard()
+        issueReportService.openReport(kind: kind)
     }
 
     private func configureMainWindow(_ window: NSWindow) {

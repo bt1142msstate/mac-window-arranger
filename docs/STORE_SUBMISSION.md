@@ -16,6 +16,8 @@ Accessibility on this Mac, which breaks the app's core feature.
 - Local privacy policy draft at `docs/PRIVACY.md`.
 - GitHub release update checks for direct-download builds, with a one-click DMG
   download/open flow.
+- GitHub issue-reporting entry points for direct-download builds, with safe
+  diagnostics that users can copy manually.
 - App category, copyright, export-compliance, Accessibility and Screen
   Recording usage, and icon
   metadata in `Info.plist`.
@@ -62,9 +64,9 @@ Apple references:
   the draft content.
 - Fill privacy disclosures: no tracking, no analytics, no network collection;
   disclose on-device window/app title access, picker-only Screen Recording
-  usage, and the GitHub release update check for direct-download builds. Disable
-  GitHub update checks for Mac App Store builds so App Store updates stay under
-  Apple's update flow.
+  usage, the GitHub release update check for direct-download builds, and the
+  GitHub issue-reporting links. Disable GitHub update checks for Mac App Store
+  builds so App Store updates stay under Apple's update flow.
 - Prepare screenshots, app description, support URL, marketing URL if desired,
   age rating, category, and low-cost paid pricing.
 

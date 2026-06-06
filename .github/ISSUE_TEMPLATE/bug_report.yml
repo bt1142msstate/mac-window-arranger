@@ -1,0 +1,44 @@
+name: Bug Report
+description: Report something that is broken or not working as expected.
+title: "Bug: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. Please avoid posting private window titles, account details, or sensitive screenshots unless they are necessary and already redacted.
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the problem in a few sentences.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: List the exact steps that trigger the issue.
+      placeholder: |
+        1. Open Window Arranger
+        2. Choose ...
+        3. Click ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+      description: Tell us what should have happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Safe diagnostics
+      description: In Window Arranger, choose Help > Report an Issue, copy diagnostics, and paste them here.
+      render: text
+  - type: textarea
+    id: context
+    attributes:
+      label: Extra context
+      description: Add screenshots, screen recordings, or details that help explain the issue. Redact private information first.
