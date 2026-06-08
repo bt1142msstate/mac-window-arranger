@@ -79,18 +79,20 @@ enum WindowPickerResult {
     case cancelled
 }
 
-protocol WindowPickingWindowProviding {
+@MainActor
+protocol WindowPickingWindowProviding: Sendable {
     func windowUnderMouse() -> WindowPickerItem?
     func appKitFrame(for window: WindowPickerItem) -> CGRect?
     func foregroundAppKitFrames(overlapping window: WindowPickerItem) -> [CGRect]
 }
 
-protocol WindowPickingPreviewCapturing {
+@MainActor
+protocol WindowPickingPreviewCapturing: Sendable {
     func requestScreenCaptureAccessIfNeeded()
 
     func capturePreview(
         for window: WindowPickerItem,
         displaySize: CGSize,
-        completion: @escaping (NSImage?) -> Void
+        completion: @escaping @MainActor @Sendable (NSImage?) -> Void
     )
 }

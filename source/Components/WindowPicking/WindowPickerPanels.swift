@@ -1,5 +1,6 @@
 import AppKit
 
+@MainActor
 final class WindowPickerCapturePanel: NSPanel {
     override var canBecomeKey: Bool {
         true
@@ -10,6 +11,7 @@ final class WindowPickerCapturePanel: NSPanel {
     }
 }
 
+@MainActor
 final class WindowPickerHighlightPanel: NSPanel {
     override var canBecomeKey: Bool {
         false
@@ -20,6 +22,7 @@ final class WindowPickerHighlightPanel: NSPanel {
     }
 }
 
+@MainActor
 final class WindowPickerFocusPanel: NSPanel {
     override var canBecomeKey: Bool {
         false

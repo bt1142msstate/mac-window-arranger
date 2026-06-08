@@ -1,11 +1,13 @@
 import AppKit
 
+@MainActor
 protocol WindowPickerInteractionHandling: AnyObject {
     func updateHoveredWindow()
     func pickHoveredWindow()
     func cancel()
 }
 
+@MainActor
 final class WindowPickerSession: WindowPickerInteractionHandling {
     private let completion: (WindowPickerResult) -> Void
     private let configuration: WindowPickerConfiguration
@@ -83,7 +85,7 @@ final class WindowPickerSession: WindowPickerInteractionHandling {
         installEventMonitors()
 
         if configuration.behavior.activatesAppDuringPick {
-            NSApp.activate(ignoringOtherApps: true)
+            NSApp.activate()
         }
 
         capturePanels.first?.makeKey()

@@ -1,7 +1,8 @@
 import AppKit
 import ScreenCaptureKit
 
-final class WindowPreviewCaptureService {
+@MainActor
+final class WindowPreviewCaptureService: @unchecked Sendable {
     private static var didRequestScreenCaptureAccess = false
 
     func requestScreenCaptureAccessIfNeeded() {
@@ -18,7 +19,7 @@ final class WindowPreviewCaptureService {
     func capturePreview(
         for window: WindowItem,
         displaySize: CGSize,
-        completion: @escaping (NSImage?) -> Void
+        completion: @escaping @MainActor @Sendable (NSImage?) -> Void
     ) {
         guard window.windowNumber != 0, CGPreflightScreenCaptureAccess() else {
             completion(nil)

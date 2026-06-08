@@ -46,14 +46,16 @@ See [docs/STORE_SUBMISSION.md](docs/STORE_SUBMISSION.md) for distribution detail
 
 The app follows a small native macOS SwiftUI structure:
 
-- `source/App`: app entry point, window delegate, and compact panel controller.
-- `source/Components`: reusable AppKit/SwiftUI components, including the window-picking overlay.
+- `source/App`: app entry point, app delegate, menu wiring, and app-specific component adapters.
+- `source/Components`: reusable AppKit/SwiftUI components, including the window-picking overlay and Dock-attached mini/expanded window surface.
 - `source/Views`: SwiftUI screens and reusable view components.
 - `source/Stores`: observable UI state and user actions.
 - `source/Services`: Accessibility, app launching, window discovery, and resize/arrange logic.
 - `source/Models` and `source/Support`: data types and shared helpers.
 
 The window picker lives in `source/Components/WindowPicking`. Other macOS apps can reuse it by copying that component folder, providing `WindowPickingWindowProviding` and `WindowPickingPreviewCapturing` implementations, and calling `WindowPickerController.pickWindow(configuration:completion:)`. The component owns the full hover/click lifecycle, focus dimming, highlighted-window badge, overlap preview, Escape/right-click cancellation, and result callback. App-specific model conversion stays in `source/App/WindowPickerAppIntegration.swift`.
+
+The Mini Mode shell lives in `source/Components/DockAttachedSurface`. Other macOS apps can reuse it by providing a `DockAttachedSurfaceConfiguration`, calling `showMini(on:content:)` with their own SwiftUI mini view, and using the shared transition and frame helpers to grow into or shrink from an expanded `NSWindow`. The transition module exposes `TransitionSnapshotFadePolicy` and `WindowTransitionSnapshotProviding` so apps can choose whether captured snapshots fade before resizing or stay visible while shrinking, and can plug in their own snapshot strategy.
 
 ## Requirements
 

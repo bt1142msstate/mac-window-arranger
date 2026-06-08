@@ -1,5 +1,6 @@
 import AppKit
 
+@MainActor
 final class WindowPickerCaptureView: NSView {
     weak var interactionHandler: WindowPickerInteractionHandling?
 
@@ -66,6 +67,7 @@ struct WindowPickerFocusOverlay {
     let focusedFrame: CGRect
 }
 
+@MainActor
 final class WindowPickerFocusView: NSView {
     private let configuration: WindowPickerConfiguration
 
@@ -131,6 +133,7 @@ final class WindowPickerFocusView: NSView {
     }
 }
 
+@MainActor
 final class WindowPickerHighlightView: NSView {
     private let configuration: WindowPickerConfiguration
     private let badgeView = NSVisualEffectView()

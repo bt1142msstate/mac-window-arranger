@@ -1,13 +1,18 @@
 import AppKit
 import SwiftUI
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     static weak var shared: AppDelegate?
 
-    private let compactPanelController = CompactPanelController()
+    private let dockSurfaceController = DockAttachedWindowSurfaceController(
+        configuration: DockAttachedSurfaceConfiguration(
+            miniTitle: "Window Arranger Mini",
+            transitionTitle: "Window Arranger Transition",
+            miniSize: CGSize(width: 430, height: 68)
+        )
+    )
     private let windowPickerController = WindowPickerController.appDefault()
-    private let transitionCoordinator = WindowTransitionCoordinator()
-    private let mainWindowBoundaryController = MainWindowBoundaryController()
     private let compactLayoutService = WindowManagementService()
     private let appUpdateService = AppUpdateService()
     private let issueReportService = IssueReportService()
@@ -15,7 +20,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var fallbackMainWindow: NSWindow?
     private var privacyPolicyWindow: NSWindow?
     private var issueReportWindow: NSWindow?
-    private var lastExpandedMainWindowFrame: NSRect?
     private var isApplyingCompactLayout = false
     private var hasHandledAutomationURL = false
 
@@ -115,8 +119,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             window.alphaValue = 1
-            self.constrainMainWindowAboveDock(window)
-            NSApp.activate(ignoringOtherApps: true)
+            self.dockSurfaceController.constrainExpandedWindow(window)
+            NSApp.activate()
             window.makeKeyAndOrderFront(nil)
             window.orderFrontRegardless()
         }
@@ -124,16 +128,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func showExpandedWindow() {
         DispatchQueue.main.async {
-            self.transitionCoordinator.cancelActiveTransition()
-            self.compactPanelController.hide()
+            self.dockSurfaceController.cancelActiveTransition()
+            self.dockSurfaceController.hideMini()
 
             guard let window = self.configureMainWindowIfNeeded(centerIfNeeded: false) else {
                 return
             }
 
             window.alphaValue = 1
-            self.constrainMainWindowAboveDock(window)
-            NSApp.activate(ignoringOtherApps: true)
+            self.dockSurfaceController.constrainExpandedWindow(window)
+            NSApp.activate()
             window.makeKeyAndOrderFront(nil)
             window.orderFrontRegardless()
         }
@@ -142,8 +146,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func fitMainWindowToContentSize(
         _ contentSize: CGSize,
         animated: Bool = true,
-        prepareContent: (() -> Void)? = nil,
-        completion: (() -> Void)? = nil
+        prepareContent: (@MainActor @Sendable () -> Void)? = nil,
+        completion: (@MainActor @Sendable () -> Void)? = nil
     ) {
         DispatchQueue.main.async {
             guard let window = self.configureMainWindowIfNeeded(centerIfNeeded: false) else {
@@ -152,14 +156,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
 
-            let frameSize = self.frameSize(for: contentSize, in: window)
-            guard let frame = self.bottomAnchoredFrameAboveDock(for: window, size: frameSize) else {
+            let frameSize = self.dockSurfaceController.frameSize(for: contentSize, in: window)
+            guard let frame = self.dockSurfaceController.bottomAnchoredFrame(for: window, size: frameSize) else {
                 prepareContent?()
                 completion?()
                 return
             }
 
-            self.lastExpandedMainWindowFrame = frame
+            self.dockSurfaceController.rememberExpandedFrame(frame, for: window)
 
             guard animated, window.isVisible else {
                 prepareContent?()
@@ -169,7 +173,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
 
-            self.transitionCoordinator.transition(
+            self.dockSurfaceController.transition(
                 from: window,
                 sourceFrame: window.frame,
                 to: frame,
@@ -181,7 +185,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 },
                 revealDestination: {
                     window.alphaValue = 1
-                    NSApp.activate(ignoringOtherApps: true)
+                    NSApp.activate()
                     window.makeKeyAndOrderFront(nil)
                     window.orderFrontRegardless()
                 },
@@ -357,23 +361,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let miniFrame = compactPanelController.currentFrame ?? compactPanelController.frame(on: window.screen)
-        let expandedFrame = constrainedMainWindowFrame(lastExpandedMainWindowFrame ?? window.frame, for: window)
-        let miniWindow = compactPanelController.currentWindow
+        let miniFrame = dockSurfaceController.currentMiniFrame ?? dockSurfaceController.miniFrame(on: window.screen)
+        let expandedFrame = dockSurfaceController.constrainedExpandedFrame(
+            dockSurfaceController.lastExpandedFrame ?? window.frame,
+            for: window
+        )
+        let miniWindow = dockSurfaceController.currentMiniWindow
 
-        transitionCoordinator.transition(
+        dockSurfaceController.transition(
             from: miniWindow,
             sourceFrame: miniFrame,
             to: expandedFrame,
             prepareDestination: {
-                self.compactPanelController.hide()
+                self.dockSurfaceController.hideMini()
                 window.setFrame(expandedFrame, display: true)
                 window.alphaValue = 0
                 window.displayIfNeeded()
             },
             revealDestination: {
                 window.alphaValue = 1
-                NSApp.activate(ignoringOtherApps: true)
+                NSApp.activate()
                 window.makeKeyAndOrderFront(nil)
                 window.orderFrontRegardless()
             }
@@ -409,7 +416,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             self.appUpdateService.checkForUpdate { [weak self] result in
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     guard let self else {
                         return
                     }
@@ -456,14 +463,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return false
         }
 
-        let targetFrame = compactPanelController.frame(on: window.screen)
+        let targetFrame = dockSurfaceController.miniFrame(on: window.screen)
         let sourceFrame = window.frame
 
         if sourceFrame.width > targetFrame.width || sourceFrame.height > targetFrame.height {
-            lastExpandedMainWindowFrame = constrainedMainWindowFrame(sourceFrame, for: window)
+            dockSurfaceController.rememberExpandedFrame(sourceFrame, for: window)
         }
 
-        let showMiniMode = {
+        let showMiniMode: @MainActor @Sendable () -> Void = {
             window.orderOut(nil)
             self.showCompactPanel(
                 message: message,
@@ -477,7 +484,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         }
 
-        transitionCoordinator.transition(
+        dockSurfaceController.transition(
             from: window,
             sourceFrame: sourceFrame,
             to: targetFrame,
@@ -491,22 +498,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showCompactPanel(message: String, kind: ResizeStatusKind, on screen: NSScreen?) {
         let layoutState = compactLayoutState()
-        compactPanelController.show(
-            message: message,
-            kind: kind,
-            layoutTitle: layoutState.title,
-            layoutOptions: layoutState.options,
-            on: screen,
-            selectLayoutAction: { [weak self] layoutID in
-                self?.applyCompactLayout(id: layoutID)
-            },
-            expandAction: { [weak self] in
-                self?.restoreMainWindow()
-            },
-            quitAction: {
-                NSApp.terminate(nil)
-            }
-        )
+        dockSurfaceController.showMini(on: screen) {
+            CompactArrangerPanelView(
+                message: compactMessage(from: message),
+                kind: kind,
+                layoutTitle: layoutState.title,
+                layoutOptions: layoutState.options,
+                selectLayoutAction: { [weak self] layoutID in
+                    self?.applyCompactLayout(id: layoutID)
+                },
+                expandAction: { [weak self] in
+                    self?.restoreMainWindow()
+                },
+                quitAction: {
+                    NSApp.terminate(nil)
+                }
+            )
+        }
+    }
+
+    private func compactMessage(from message: String) -> String {
+        let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !trimmedMessage.isEmpty else {
+            return "Ready to arrange windows."
+        }
+
+        return trimmedMessage.components(separatedBy: .newlines).first ?? trimmedMessage
     }
 
     private func compactLayoutState() -> (title: String?, options: [CompactLayoutOption]) {
@@ -571,22 +589,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         isApplyingCompactLayout = true
         LayoutPersistence.selectedLayoutID = layout.id.uuidString
-        let layoutState = compactLayoutState()
-        compactPanelController.show(
+        showCompactPanel(
             message: "Opening and arranging \(layout.name)...",
             kind: .neutral,
-            layoutTitle: layoutState.title,
-            layoutOptions: layoutState.options,
-            on: compactPanelController.currentWindow?.screen,
-            selectLayoutAction: { [weak self] layoutID in
-                self?.applyCompactLayout(id: layoutID)
-            },
-            expandAction: { [weak self] in
-                self?.restoreMainWindow()
-            },
-            quitAction: {
-                NSApp.terminate(nil)
-            }
+            on: dockSurfaceController.currentMiniWindow?.screen
         )
 
         DispatchQueue.global(qos: .userInitiated).async { [compactLayoutService] in
@@ -608,12 +614,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let isNewMainWindow = mainWindow !== window
         mainWindow = window
         configureMainWindow(window)
-        mainWindowBoundaryController.track(window)
+        dockSurfaceController.trackExpandedWindow(window)
 
         if centerIfNeeded || isNewMainWindow {
-            positionMainWindowAboveDock(window)
+            dockSurfaceController.positionExpandedWindowAboveDock(window)
         } else {
-            constrainMainWindowAboveDock(window)
+            dockSurfaceController.constrainExpandedWindow(window)
         }
 
         return window
@@ -637,7 +643,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let window = privacyPolicyWindow ?? makePrivacyPolicyWindow()
         privacyPolicyWindow = window
 
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
     }
@@ -646,7 +652,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let window = issueReportWindow ?? makeIssueReportWindow()
         issueReportWindow = window
 
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
     }
@@ -717,82 +723,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ])
     }
 
-    private func constrainMainWindowAboveDock(_ window: NSWindow) {
-        let constrainedFrame = constrainedMainWindowFrame(window.frame, for: window)
-
-        guard constrainedFrame != window.frame else {
-            return
-        }
-
-        window.setFrame(constrainedFrame, display: true)
-    }
-
-    private func constrainedMainWindowFrame(_ frame: NSRect, for window: NSWindow) -> NSRect {
-        guard let screen = NSScreen.bestScreen(for: frame, fallback: window.screen) else {
-            return frame
-        }
-
-        let margin: CGFloat = 12
-        var constrainedFrame = frame
-        let minimumY = screen.visibleFrame.minY + margin
-
-        if constrainedFrame.minY < minimumY {
-            constrainedFrame.origin.y = minimumY
-        }
-
-        return constrainedFrame
-    }
-
-    private func positionMainWindowAboveDock(_ window: NSWindow) {
-        guard let frame = bottomAnchoredFrameAboveDock(for: window, size: window.frame.size) else {
-            return
-        }
-
-        window.setFrame(frame, display: true)
-        lastExpandedMainWindowFrame = frame
-    }
-
-    private func bottomAnchoredFrameAboveDock(for window: NSWindow, size: CGSize) -> NSRect? {
-        guard let screen = window.screen ?? NSScreen.main ?? NSScreen.screens.first else {
-            return nil
-        }
-
-        let visibleFrame = screen.visibleFrame
-        let margin: CGFloat = 12
-        var frame = NSRect(origin: window.frame.origin, size: size)
-
-        let centeredX = visibleFrame.midX - (frame.width / 2)
-        let minimumX = visibleFrame.minX + margin
-        let maximumX = visibleFrame.maxX - frame.width - margin
-        frame.origin.x = clamped(centeredX, lower: minimumX, upper: maximumX)
-
-        let dockAdjustedY = visibleFrame.minY + margin
-        let highestAllowedY = visibleFrame.maxY - frame.height - margin
-        frame.origin.y = min(dockAdjustedY, highestAllowedY)
-        frame.origin.y = max(frame.origin.y, visibleFrame.minY + margin)
-
-        return frame
-    }
-
-    private func frameSize(for contentSize: CGSize, in window: NSWindow) -> CGSize {
-        let currentContentSize = window.contentLayoutRect.size
-        let chromeWidth = max(window.frame.width - currentContentSize.width, 0)
-        let chromeHeight = max(window.frame.height - currentContentSize.height, 0)
-
-        return CGSize(
-            width: contentSize.width + chromeWidth,
-            height: contentSize.height + chromeHeight
-        )
-    }
-
-    private func clamped(_ value: CGFloat, lower: CGFloat, upper: CGFloat) -> CGFloat {
-        guard lower <= upper else {
-            return lower
-        }
-
-        return min(max(value, lower), upper)
-    }
-
     private func statusKind(for message: String) -> ResizeStatusKind {
         let lowercased = message.lowercased()
 
@@ -805,91 +735,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return .success
-    }
-}
-
-private final class MainWindowBoundaryController {
-    private weak var trackedWindow: NSWindow?
-    private var observer: NSObjectProtocol?
-    private var isConstrainingFrame = false
-
-    func track(_ window: NSWindow) {
-        guard trackedWindow !== window else {
-            return
-        }
-
-        if let observer {
-            NotificationCenter.default.removeObserver(observer)
-        }
-
-        trackedWindow = window
-        observer = NotificationCenter.default.addObserver(
-            forName: NSWindow.didMoveNotification,
-            object: window,
-            queue: .main
-        ) { [weak self] notification in
-            guard let window = notification.object as? NSWindow else {
-                return
-            }
-
-            self?.constrain(window)
-        }
-    }
-
-    deinit {
-        if let observer {
-            NotificationCenter.default.removeObserver(observer)
-        }
-    }
-
-    private func constrain(_ window: NSWindow) {
-        guard !isConstrainingFrame else {
-            return
-        }
-
-        guard let screen = NSScreen.bestScreen(for: window.frame, fallback: window.screen) else {
-            return
-        }
-
-        let margin: CGFloat = 12
-        let minimumY = screen.visibleFrame.minY + margin
-
-        guard window.frame.minY < minimumY else {
-            return
-        }
-
-        var frame = window.frame
-        frame.origin.y = minimumY
-
-        isConstrainingFrame = true
-        window.setFrame(frame, display: true)
-        isConstrainingFrame = false
-    }
-}
-
-private extension NSScreen {
-    static func bestScreen(for frame: NSRect, fallback: NSScreen?) -> NSScreen? {
-        let candidates = screens.map { screen in
-            (screen: screen, area: screen.frame.intersection(frame).positiveArea)
-        }
-        let bestMatch = candidates.max { first, second in
-            first.area < second.area
-        }
-
-        if let bestMatch, bestMatch.area > 0 {
-            return bestMatch.screen
-        }
-
-        return fallback ?? main ?? screens.first
-    }
-}
-
-private extension NSRect {
-    var positiveArea: CGFloat {
-        guard width > 0, height > 0 else {
-            return 0
-        }
-
-        return width * height
     }
 }

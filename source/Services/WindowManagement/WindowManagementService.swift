@@ -3,8 +3,48 @@ import ApplicationServices
 import Foundation
 
 struct WindowManagementService {
-    private static var installedAppCache: [AppItem]?
+    private static let installedAppCache = InstalledAppCache()
     private let layoutFrameService = WindowLayoutFrameService()
+
+    private enum AccessibilityOptions {
+        static let promptKey = "AXTrustedCheckOptionPrompt"
+    }
+
+    private final class InstalledAppCache: @unchecked Sendable {
+        private let lock = NSLock()
+        private var apps: [AppItem]?
+
+        func get() -> [AppItem]? {
+            lock.lock()
+            defer { lock.unlock() }
+            return apps
+        }
+
+        func set(_ apps: [AppItem]) {
+            lock.lock()
+            self.apps = apps
+            lock.unlock()
+        }
+    }
+
+    private final class WorkspaceLaunchResult: @unchecked Sendable {
+        private let lock = NSLock()
+        private var application: NSRunningApplication?
+        private var error: Error?
+
+        func set(application: NSRunningApplication?, error: Error?) {
+            lock.lock()
+            self.application = application
+            self.error = error
+            lock.unlock()
+        }
+
+        func value() -> (application: NSRunningApplication?, error: Error?) {
+            lock.lock()
+            defer { lock.unlock() }
+            return (application, error)
+        }
+    }
 
     private struct LayoutWindowCandidate {
         let key: String
@@ -39,7 +79,7 @@ struct WindowManagementService {
     }
 
     func requestAccessibilityAccess() {
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
+        let options = [AccessibilityOptions.promptKey: true]
         AXIsProcessTrustedWithOptions(options as CFDictionary)
     }
 
@@ -262,7 +302,7 @@ struct WindowManagementService {
     }
 
     private func loadInstalledApps() -> [AppItem] {
-        if let installedAppCache = Self.installedAppCache {
+        if let installedAppCache = Self.installedAppCache.get() {
             return installedAppCache
         }
 
@@ -298,7 +338,7 @@ struct WindowManagementService {
         let apps = appsByID.values.sorted { lhs, rhs in
             lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
         }
-        Self.installedAppCache = apps
+        Self.installedAppCache.set(apps)
         return apps
     }
 
@@ -1011,12 +1051,10 @@ struct WindowManagementService {
         configuration.activates = true
 
         let semaphore = DispatchSemaphore(value: 0)
-        var launchedApplication: NSRunningApplication?
-        var launchError: Error?
+        let launchResult = WorkspaceLaunchResult()
 
         NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { application, error in
-            launchedApplication = application
-            launchError = error
+            launchResult.set(application: application, error: error)
             semaphore.signal()
         }
 
@@ -1024,7 +1062,8 @@ struct WindowManagementService {
             return (nil, "Launch timed out.")
         }
 
-        return (launchedApplication, launchError?.localizedDescription)
+        let result = launchResult.value()
+        return (result.application, result.error?.localizedDescription)
     }
 
     private func activateApplication(for slot: SavedLayoutSlot) {

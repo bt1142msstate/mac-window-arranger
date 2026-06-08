@@ -3,6 +3,7 @@ import Foundation
 import Observation
 
 @Observable
+@MainActor
 final class WindowArrangerStore {
     var runningApps: [AppItem] = []
     var availableWindows: [WindowItem] = []

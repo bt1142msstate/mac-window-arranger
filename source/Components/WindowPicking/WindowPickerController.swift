@@ -1,5 +1,6 @@
 import AppKit
 
+@MainActor
 final class WindowPickerController {
     private let previewCaptureService: WindowPickingPreviewCapturing
     private let windowProvider: WindowPickingWindowProviding

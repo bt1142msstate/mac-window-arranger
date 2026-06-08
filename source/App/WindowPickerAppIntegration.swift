@@ -1,7 +1,8 @@
 import AppKit
 import Foundation
 
-private final class AppWindowPickerWindowProvider: WindowPickingWindowProviding {
+@MainActor
+private final class AppWindowPickerWindowProvider: WindowPickingWindowProviding, @unchecked Sendable {
     private let service = WindowManagementService()
 
     func windowUnderMouse() -> WindowPickerItem? {
@@ -17,7 +18,8 @@ private final class AppWindowPickerWindowProvider: WindowPickingWindowProviding 
     }
 }
 
-private final class AppWindowPickerPreviewCaptureService: WindowPickingPreviewCapturing {
+@MainActor
+private final class AppWindowPickerPreviewCaptureService: WindowPickingPreviewCapturing, @unchecked Sendable {
     private let service = WindowPreviewCaptureService()
 
     func requestScreenCaptureAccessIfNeeded() {
@@ -27,7 +29,7 @@ private final class AppWindowPickerPreviewCaptureService: WindowPickingPreviewCa
     func capturePreview(
         for window: WindowPickerItem,
         displaySize: CGSize,
-        completion: @escaping (NSImage?) -> Void
+        completion: @escaping @MainActor @Sendable (NSImage?) -> Void
     ) {
         service.capturePreview(
             for: WindowItem(pickerItem: window),

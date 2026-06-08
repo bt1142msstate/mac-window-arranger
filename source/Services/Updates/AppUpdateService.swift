@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
 
-final class AppUpdateService {
+final class AppUpdateService: @unchecked Sendable {
     private struct GitHubReleaseResponse: Decodable {
         let tagName: String
         let name: String?
@@ -131,7 +131,7 @@ final class AppUpdateService {
         defaults.removeObject(forKey: Constants.cachedUpdateDefaultsKey)
     }
 
-    func checkForUpdate(completion: @escaping (Result<AppUpdateCheckResult, Error>) -> Void) {
+    func checkForUpdate(completion: @escaping @Sendable (Result<AppUpdateCheckResult, Error>) -> Void) {
         guard isGitHubUpdateCheckEnabled else {
             completion(.failure(AppUpdateServiceError.disabled))
             return
@@ -192,9 +192,9 @@ final class AppUpdateService {
         .resume()
     }
 
-    func downloadAndOpen(update: AppUpdate, completion: @escaping (Result<URL, Error>) -> Void) {
+    func downloadAndOpen(update: AppUpdate, completion: @escaping @Sendable (Result<URL, Error>) -> Void) {
         guard let assetURL = update.assetDownloadURL else {
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 NSWorkspace.shared.open(update.releaseURL)
                 completion(.success(update.releaseURL))
             }
@@ -234,7 +234,7 @@ final class AppUpdateService {
 
                 try self.fileManager.moveItem(at: temporaryURL, to: destinationURL)
 
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     NSWorkspace.shared.open(destinationURL)
                     completion(.success(destinationURL))
                 }
@@ -245,6 +245,7 @@ final class AppUpdateService {
         .resume()
     }
 
+    @MainActor
     func openReleasePage(for update: AppUpdate) {
         NSWorkspace.shared.open(update.releaseURL)
     }
