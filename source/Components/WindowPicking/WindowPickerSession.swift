@@ -1,26 +1,36 @@
 import AppKit
 
-final class WindowPickerController {
-    private let service = WindowManagementService()
-    private let previewCaptureService = WindowPreviewCaptureService()
+protocol WindowPickerInteractionHandling: AnyObject {
+    func updateHoveredWindow()
+    func pickHoveredWindow()
+    func cancel()
+}
+
+final class WindowPickerSession: WindowPickerInteractionHandling {
+    private let completion: (WindowPickerResult) -> Void
+    private let configuration: WindowPickerConfiguration
+    private let previewCaptureService: WindowPickingPreviewCapturing
+    private let windowProvider: WindowPickingWindowProviding
     private var capturePanels: [WindowPickerCapturePanel] = []
     private var focusPanels: [WindowPickerFocusPanel] = []
     private var highlightPanel: WindowPickerHighlightPanel?
-    private var hoveredWindow: WindowItem?
-    private var onPicked: ((WindowItem) -> Void)?
-    private var onCancelled: (() -> Void)?
+    private var hoveredWindow: WindowPickerItem?
     private var eventMonitors: [Any] = []
+    private var didComplete = false
 
-    func start(
-        onPicked: @escaping (WindowItem) -> Void,
-        onCancelled: @escaping () -> Void
+    init(
+        configuration: WindowPickerConfiguration,
+        windowProvider: WindowPickingWindowProviding,
+        previewCaptureService: WindowPickingPreviewCapturing,
+        completion: @escaping (WindowPickerResult) -> Void
     ) {
-        cancel(notify: false)
+        self.completion = completion
+        self.configuration = configuration
+        self.windowProvider = windowProvider
+        self.previewCaptureService = previewCaptureService
+    }
 
-        self.onPicked = onPicked
-        self.onCancelled = onCancelled
-        previewCaptureService.requestScreenCaptureAccessIfNeeded()
-
+    func start() {
         capturePanels = NSScreen.screens.map { screen in
             let panel = WindowPickerCapturePanel(
                 contentRect: screen.frame,
@@ -29,7 +39,7 @@ final class WindowPickerController {
                 defer: false
             )
             let captureView = WindowPickerCaptureView()
-            captureView.controller = self
+            captureView.interactionHandler = self
             panel.contentView = captureView
             panel.isOpaque = false
             panel.backgroundColor = .clear
@@ -54,7 +64,7 @@ final class WindowPickerController {
                 backing: .buffered,
                 defer: false
             )
-            panel.contentView = WindowPickerFocusView()
+            panel.contentView = WindowPickerFocusView(configuration: configuration)
             panel.isOpaque = false
             panel.backgroundColor = .clear
             panel.hasShadow = false
@@ -71,13 +81,17 @@ final class WindowPickerController {
         }
 
         installEventMonitors()
-        NSApp.activate(ignoringOtherApps: true)
+
+        if configuration.behavior.activatesAppDuringPick {
+            NSApp.activate(ignoringOtherApps: true)
+        }
+
         capturePanels.first?.makeKey()
         updateHoveredWindow()
     }
 
     func updateHoveredWindow() {
-        let nextWindow = service.windowUnderMouse()
+        let nextWindow = windowProvider.windowUnderMouse()
 
         guard nextWindow?.id != hoveredWindow?.id else {
             return
@@ -95,36 +109,58 @@ final class WindowPickerController {
             return
         }
 
-        let picked = onPicked
-        cleanup()
-        picked?(hoveredWindow)
+        finish(with: .selected(hoveredWindow))
     }
 
     func cancel() {
         cancel(notify: true)
     }
 
-    private func cancel(notify: Bool) {
-        let cancelled = onCancelled
+    func cancel(notify: Bool) {
+        guard !didComplete else {
+            return
+        }
+
         cleanup()
 
         if notify {
-            cancelled?()
+            finishCompletion(with: .cancelled)
         }
     }
 
-    private func updateHighlight(for window: WindowItem?) {
+    private func finish(with result: WindowPickerResult) {
+        guard !didComplete else {
+            return
+        }
+
+        cleanup()
+        finishCompletion(with: result)
+    }
+
+    private func finishCompletion(with result: WindowPickerResult) {
+        guard !didComplete else {
+            return
+        }
+
+        didComplete = true
+        completion(result)
+    }
+
+    private func updateHighlight(for window: WindowPickerItem?) {
         guard
             let window,
-            let frame = service.appKitFrame(for: window)
+            let frame = windowProvider.appKitFrame(for: window)
         else {
             updateFocusOverlay(nil)
             highlightPanel?.orderOut(nil)
             return
         }
 
-        let foregroundFrames = service.foregroundAppKitFrames(overlapping: window)
+        let foregroundFrames = configuration.behavior.previewsOccludingWindows
+            ? windowProvider.foregroundAppKitFrames(overlapping: window)
+            : []
         updateFocusOverlay(WindowPickerFocusOverlay(focusedFrame: frame))
+
         let panel = highlightPanel ?? makeHighlightPanel()
         highlightPanel = panel
         (panel.contentView as? WindowPickerHighlightView)?.configure(
@@ -132,8 +168,18 @@ final class WindowPickerController {
             previewImage: nil,
             foregroundFrames: foregroundFrames
         )
-        panel.setFrame(frame.insetBy(dx: -4, dy: -4), display: true)
+        panel.setFrame(
+            frame.insetBy(
+                dx: -configuration.style.highlightInset,
+                dy: -configuration.style.highlightInset
+            ),
+            display: true
+        )
         panel.orderFrontRegardless()
+
+        guard configuration.behavior.previewsOccludingWindows else {
+            return
+        }
 
         let hoveredWindowID = window.id
         previewCaptureService.capturePreview(for: window, displaySize: frame.size) { [weak self, weak panel] image in
@@ -158,7 +204,7 @@ final class WindowPickerController {
             backing: .buffered,
             defer: false
         )
-        panel.contentView = WindowPickerHighlightView()
+        panel.contentView = WindowPickerHighlightView(configuration: configuration)
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false
@@ -175,8 +221,6 @@ final class WindowPickerController {
 
     private func cleanup() {
         hoveredWindow = nil
-        onPicked = nil
-        onCancelled = nil
 
         for monitor in eventMonitors {
             NSEvent.removeMonitor(monitor)
@@ -209,7 +253,7 @@ final class WindowPickerController {
         )
 
         appendEventMonitor(
-            NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] event in
+            NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] _ in
                 self?.pickHoveredWindow()
                 return nil
             }

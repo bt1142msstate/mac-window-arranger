@@ -5,7 +5,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     static weak var shared: AppDelegate?
 
     private let compactPanelController = CompactPanelController()
-    private let windowPickerController = WindowPickerController()
+    private let windowPickerController = WindowPickerController.appDefault()
     private let transitionCoordinator = WindowTransitionCoordinator()
     private let mainWindowBoundaryController = MainWindowBoundaryController()
     private let compactLayoutService = WindowManagementService()
@@ -191,15 +191,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func beginWindowPick(
+        configuration: WindowPickerConfiguration = .default,
         onPicked: @escaping (WindowItem) -> Void,
         onCancelled: @escaping () -> Void
     ) {
         DispatchQueue.main.async {
             self.configureMainWindowIfNeeded(centerIfNeeded: false)?.orderOut(nil)
-            self.windowPickerController.start(
-                onPicked: onPicked,
-                onCancelled: onCancelled
-            )
+            self.windowPickerController.pickWindow(configuration: configuration) { result in
+                switch result {
+                case .selected(let window):
+                    onPicked(WindowItem(pickerItem: window))
+                case .cancelled:
+                    onCancelled()
+                }
+            }
         }
     }
 

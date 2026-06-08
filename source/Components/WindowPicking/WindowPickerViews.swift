@@ -1,7 +1,7 @@
 import AppKit
 
 final class WindowPickerCaptureView: NSView {
-    weak var controller: WindowPickerController?
+    weak var interactionHandler: WindowPickerInteractionHandling?
 
     override var acceptsFirstResponder: Bool {
         true
@@ -38,24 +38,24 @@ final class WindowPickerCaptureView: NSView {
     }
 
     override func mouseMoved(with event: NSEvent) {
-        controller?.updateHoveredWindow()
+        interactionHandler?.updateHoveredWindow()
     }
 
     override func mouseDragged(with event: NSEvent) {
-        controller?.updateHoveredWindow()
+        interactionHandler?.updateHoveredWindow()
     }
 
     override func mouseDown(with event: NSEvent) {
-        controller?.pickHoveredWindow()
+        interactionHandler?.pickHoveredWindow()
     }
 
     override func rightMouseDown(with event: NSEvent) {
-        controller?.cancel()
+        interactionHandler?.cancel()
     }
 
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 53 {
-            controller?.cancel()
+            interactionHandler?.cancel()
         } else {
             super.keyDown(with: event)
         }
@@ -67,6 +67,8 @@ struct WindowPickerFocusOverlay {
 }
 
 final class WindowPickerFocusView: NSView {
+    private let configuration: WindowPickerConfiguration
+
     var overlay: WindowPickerFocusOverlay? {
         didSet {
             needsDisplay = true
@@ -77,14 +79,27 @@ final class WindowPickerFocusView: NSView {
         false
     }
 
+    init(configuration: WindowPickerConfiguration) {
+        self.configuration = configuration
+        super.init(frame: .zero)
+    }
+
+    required init?(coder: NSCoder) {
+        nil
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
 
         guard
+            configuration.behavior.dimsBackground,
             let overlay,
             let windowFrame = window?.frame,
             let focusedFrame = localFrame(from: overlay.focusedFrame, in: windowFrame)?
-                .insetBy(dx: -5, dy: -5)
+                .insetBy(
+                    dx: -configuration.style.focusCutoutInset,
+                    dy: -configuration.style.focusCutoutInset
+                )
                 .intersection(bounds),
             !focusedFrame.isNull,
             focusedFrame.width > 0,
@@ -96,7 +111,7 @@ final class WindowPickerFocusView: NSView {
         let path = NSBezierPath(rect: bounds)
         path.append(NSBezierPath(roundedRect: focusedFrame, xRadius: 11, yRadius: 11))
         path.windingRule = .evenOdd
-        NSColor.black.withAlphaComponent(0.34).setFill()
+        NSColor.black.withAlphaComponent(configuration.style.focusDimmingOpacity).setFill()
         path.fill()
     }
 
@@ -117,21 +132,25 @@ final class WindowPickerFocusView: NSView {
 }
 
 final class WindowPickerHighlightView: NSView {
+    private let configuration: WindowPickerConfiguration
     private let badgeView = NSVisualEffectView()
     private let iconView = NSImageView()
     private let titleField = NSTextField(labelWithString: "")
     private var previewImage: NSImage?
     private var foregroundFrames: [CGRect] = []
 
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
+    init(configuration: WindowPickerConfiguration) {
+        self.configuration = configuration
+        super.init(frame: .zero)
         wantsLayer = true
-        layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.12).cgColor
-        layer?.borderColor = NSColor.controlAccentColor.cgColor
-        layer?.borderWidth = 3
-        layer?.cornerRadius = 8
+        layer?.backgroundColor = configuration.style.accentColor
+            .withAlphaComponent(configuration.style.highlightFillOpacity)
+            .cgColor
+        layer?.borderColor = configuration.style.accentColor.cgColor
+        layer?.borderWidth = configuration.style.highlightBorderWidth
+        layer?.cornerRadius = configuration.style.highlightCornerRadius
 
-        badgeView.material = .hudWindow
+        badgeView.material = configuration.style.badgeMaterial
         badgeView.blendingMode = .withinWindow
         badgeView.state = .active
         badgeView.wantsLayer = true
@@ -148,13 +167,14 @@ final class WindowPickerHighlightView: NSView {
         titleField.lineBreakMode = .byTruncatingTail
         titleField.maximumNumberOfLines = 1
         badgeView.addSubview(titleField)
+        badgeView.isHidden = !configuration.behavior.showsWindowBadge
     }
 
     required init?(coder: NSCoder) {
         nil
     }
 
-    func configure(for window: WindowItem, previewImage: NSImage?, foregroundFrames: [CGRect]) {
+    func configure(for window: WindowPickerItem, previewImage: NSImage?, foregroundFrames: [CGRect]) {
         self.previewImage = previewImage
         self.foregroundFrames = foregroundFrames
         iconView.image = appIcon(
@@ -175,6 +195,7 @@ final class WindowPickerHighlightView: NSView {
         super.draw(dirtyRect)
 
         guard
+            configuration.behavior.previewsOccludingWindows,
             !foregroundFrames.isEmpty,
             let windowFrame = window?.frame
         else {
@@ -203,15 +224,17 @@ final class WindowPickerHighlightView: NSView {
                     in: imageRect,
                     from: .zero,
                     operation: .sourceOver,
-                    fraction: 0.76,
+                    fraction: configuration.style.occludingPreviewOpacity,
                     respectFlipped: true,
                     hints: [.interpolation: NSImageInterpolation.high]
                 )
             }
 
-            NSColor.white.withAlphaComponent(previewImage == nil ? 0.42 : 0.16).setFill()
+            NSColor.white.withAlphaComponent(
+                previewImage == nil ? configuration.style.occludingFallbackOpacity : 0.16
+            ).setFill()
             clipPath.fill()
-            NSColor.controlAccentColor.withAlphaComponent(0.22).setStroke()
+            configuration.style.accentColor.withAlphaComponent(0.22).setStroke()
             clipPath.lineWidth = 1
             clipPath.stroke()
             NSGraphicsContext.restoreGraphicsState()
