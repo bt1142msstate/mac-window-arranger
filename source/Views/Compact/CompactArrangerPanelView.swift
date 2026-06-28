@@ -56,7 +56,7 @@ struct CompactArrangerPanelView: View {
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(kind.color.opacity(0.28), lineWidth: 1)
+                .stroke(Color.secondary.opacity(0.16), lineWidth: 1)
         )
     }
 
