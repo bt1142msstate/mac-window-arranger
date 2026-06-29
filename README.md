@@ -142,7 +142,7 @@ Publishing a GitHub Release with a tag like `v1.12` automatically builds and upl
 
 - Checks out the release tag.
 - Sets `CFBundleShortVersionString` from the tag, such as `v1.12` to `1.12`.
-- Sets `CFBundleVersion` from the GitHub Actions run number.
+- Sets `CFBundleVersion` from the version number, such as `v1.12` to `11200`.
 - Builds and verifies `dist/Window Arranger.dmg`.
 - Uploads the release asset as `Window.Arranger.dmg`, replacing an older asset with the same name if needed.
 

@@ -52,7 +52,7 @@ jobs:
           ref: ${{ steps.release.outputs.tag }}
 
       - name: Prepare app version
-        run: ./script/prepare_release_version.sh "${{ steps.release.outputs.tag }}" "$GITHUB_RUN_NUMBER"
+        run: ./script/prepare_release_version.sh "${{ steps.release.outputs.tag }}"
 
       - name: Build and verify DMG
         run: ./script/build_and_run.sh --dmg

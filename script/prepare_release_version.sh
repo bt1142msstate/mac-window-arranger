@@ -19,12 +19,9 @@ if [[ ! "$VERSION" =~ ^[0-9]+([.][0-9]+){1,2}$ ]]; then
 fi
 
 if [[ -z "$BUILD_NUMBER" ]]; then
-  CURRENT_BUILD="$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$INFO_PLIST")"
-  if [[ "$CURRENT_BUILD" =~ ^[0-9]+$ ]]; then
-    BUILD_NUMBER="$((CURRENT_BUILD + 1))"
-  else
-    BUILD_NUMBER="$(date -u +%Y%m%d%H%M)"
-  fi
+  IFS=. read -r major minor patch_extra <<< "$VERSION"
+  patch="${patch_extra:-0}"
+  BUILD_NUMBER="$((major * 10000 + minor * 100 + patch))"
 fi
 
 if [[ ! "$BUILD_NUMBER" =~ ^[0-9]+([.][0-9]+)*$ ]]; then
