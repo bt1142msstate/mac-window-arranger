@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INFO_PLIST="$ROOT_DIR/source/Info.plist"
 TAG_NAME="${1:-${GITHUB_REF_NAME:-}}"
-BUILD_NUMBER="${2:-${GITHUB_RUN_NUMBER:-}}"
+BUILD_NUMBER="${2:-}"
 
 if [[ -z "$TAG_NAME" ]]; then
   echo "usage: $0 <release-tag> [build-number]" >&2
