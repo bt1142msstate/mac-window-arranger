@@ -136,6 +136,25 @@ This creates or refreshes `dist/Window Arranger.dmg`, a read-only compressed dis
 
 Local DMGs are signed with the stable local signing identity so they validate on this Mac. Public direct-download releases should be rebuilt with a Developer ID Application certificate and notarized before distribution.
 
+## Release Automation
+
+Publishing a GitHub Release with a tag like `v1.12` automatically builds and uploads the direct-download DMG. The release workflow:
+
+- Checks out the release tag.
+- Sets `CFBundleShortVersionString` from the tag, such as `v1.12` to `1.12`.
+- Sets `CFBundleVersion` from the GitHub Actions run number.
+- Builds and verifies `dist/Window Arranger.dmg`.
+- Uploads the release asset as `Window.Arranger.dmg`, replacing an older asset with the same name if needed.
+
+The workflow requires these GitHub Actions secrets so release builds keep the same macOS code identity across updates:
+
+- `WINDOW_ARRANGER_SIGNING_IDENTITY`
+- `WINDOW_ARRANGER_SIGNING_CERTIFICATE_BASE64`
+- `WINDOW_ARRANGER_SIGNING_CERTIFICATE_PASSWORD`
+- `WINDOW_ARRANGER_SIGNING_KEYCHAIN_PASSWORD`
+
+A future Developer ID certificate can use the same workflow; notarization should be added before public direct-download distribution.
+
 ## Privacy
 
 Mac Window Arranger does not collect analytics, tracking data, or window data. It reads the local list of running apps and window titles so you can select windows to arrange. Direct-download builds contact GitHub's latest-release endpoint to check for updates and can open GitHub issue-reporting pages when you choose to report an issue; window titles, saved layouts, and app selections are not sent. Optional Screen Recording access is used only while picking a window so overlapping windows can appear translucent over the highlighted target. Saved layouts stay on this Mac in app preferences. See [docs/PRIVACY.md](docs/PRIVACY.md).

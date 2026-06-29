@@ -43,6 +43,8 @@ SIGNING_DIR="${WINDOW_ARRANGER_SIGNING_DIR:-$HOME/Library/Application Support/Wi
 SIGNING_KEYCHAIN="$SIGNING_DIR/window-arranger-signing.keychain-db"
 SIGNING_KEYCHAIN_PASSWORD="${WINDOW_ARRANGER_SIGNING_KEYCHAIN_PASSWORD:-window-arranger-local-signing}"
 SIGNING_P12_PASSWORD="${WINDOW_ARRANGER_SIGNING_P12_PASSWORD:-window-arranger-local-signing-p12}"
+SIGNING_CERTIFICATE_BASE64="${WINDOW_ARRANGER_SIGNING_CERTIFICATE_BASE64:-}"
+SIGNING_CERTIFICATE_REQUIRED="${WINDOW_ARRANGER_REQUIRE_SIGNING_CERTIFICATE:-0}"
 # This tracked baseline protects Accessibility permission across local updates.
 # If the signing cert is lost or changed, the build fails before replacing the
 # installed app instead of silently resetting macOS privacy permission.
@@ -80,6 +82,40 @@ ensure_local_signing_identity() {
     fi
 
     security delete-keychain "$SIGNING_KEYCHAIN" >/dev/null 2>&1 || rm -f "$SIGNING_KEYCHAIN"
+  fi
+
+  if [[ -n "$SIGNING_CERTIFICATE_BASE64" ]]; then
+    security create-keychain -p "$SIGNING_KEYCHAIN_PASSWORD" "$SIGNING_KEYCHAIN" >/dev/null
+    security set-keychain-settings -lut 21600 "$SIGNING_KEYCHAIN" >/dev/null
+    security unlock-keychain -p "$SIGNING_KEYCHAIN_PASSWORD" "$SIGNING_KEYCHAIN" >/dev/null
+
+    local imported_p12="$SIGNING_DIR/window-arranger-signing-import.p12"
+    printf '%s' "$SIGNING_CERTIFICATE_BASE64" | base64 --decode > "$imported_p12"
+
+    security import "$imported_p12" \
+      -k "$SIGNING_KEYCHAIN" \
+      -P "$SIGNING_P12_PASSWORD" \
+      -T /usr/bin/codesign >/dev/null
+
+    security set-key-partition-list \
+      -S apple-tool:,apple: \
+      -s \
+      -k "$SIGNING_KEYCHAIN_PASSWORD" \
+      "$SIGNING_KEYCHAIN" >/dev/null
+
+    rm -f "$imported_p12"
+
+    if security find-identity -v -p codesigning "$SIGNING_KEYCHAIN" 2>/dev/null | grep -F "\"$SIGNING_IDENTITY\"" >/dev/null; then
+      return
+    fi
+
+    echo "Imported signing certificate did not contain identity \"$SIGNING_IDENTITY\"." >&2
+    exit 1
+  fi
+
+  if [[ "$SIGNING_CERTIFICATE_REQUIRED" == "1" ]]; then
+    echo "Release signing certificate is required but WINDOW_ARRANGER_SIGNING_CERTIFICATE_BASE64 is not set." >&2
+    exit 1
   fi
 
   security create-keychain -p "$SIGNING_KEYCHAIN_PASSWORD" "$SIGNING_KEYCHAIN" >/dev/null

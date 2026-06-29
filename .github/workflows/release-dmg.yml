@@ -1,0 +1,71 @@
+name: Release DMG
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to package, such as v1.12
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-dmg-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-upload:
+    name: Build and upload release DMG
+    runs-on: macos-latest
+    env:
+      WINDOW_ARRANGER_REQUIRE_SIGNING_CERTIFICATE: "1"
+      WINDOW_ARRANGER_SIGNING_IDENTITY: ${{ secrets.WINDOW_ARRANGER_SIGNING_IDENTITY }}
+      WINDOW_ARRANGER_SIGNING_CERTIFICATE_BASE64: ${{ secrets.WINDOW_ARRANGER_SIGNING_CERTIFICATE_BASE64 }}
+      WINDOW_ARRANGER_SIGNING_P12_PASSWORD: ${{ secrets.WINDOW_ARRANGER_SIGNING_CERTIFICATE_PASSWORD }}
+      WINDOW_ARRANGER_SIGNING_KEYCHAIN_PASSWORD: ${{ secrets.WINDOW_ARRANGER_SIGNING_KEYCHAIN_PASSWORD }}
+      WINDOW_ARRANGER_SIGNING_DIR: ${{ runner.temp }}/window-arranger-signing
+
+    steps:
+      - name: Resolve release tag
+        id: release
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="${{ github.event.release.tag_name }}"
+          fi
+
+          if [[ -z "$tag" ]]; then
+            echo "Release tag is required." >&2
+            exit 1
+          fi
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Check out release source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.release.outputs.tag }}
+
+      - name: Prepare app version
+        run: ./script/prepare_release_version.sh "${{ steps.release.outputs.tag }}" "$GITHUB_RUN_NUMBER"
+
+      - name: Build and verify DMG
+        run: ./script/build_and_run.sh --dmg
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Window.Arranger.dmg
+          path: dist/Window Arranger.dmg
+          if-no-files-found: error
+
+      - name: Upload DMG to GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: gh release upload "$RELEASE_TAG" "dist/Window Arranger.dmg#Window.Arranger.dmg" --clobber
