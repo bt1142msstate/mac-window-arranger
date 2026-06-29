@@ -191,6 +191,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 from: window,
                 sourceFrame: window.frame,
                 to: frame,
+                snapshotFadePolicy: .fadeBeforeResize,
                 prepareDestination: {
                     prepareContent?()
                     window.setFrame(frame, display: true)
@@ -198,7 +199,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     window.displayIfNeeded()
                 },
                 revealDestination: {
+                    window.setFrame(frame, display: true)
                     window.alphaValue = 1
+                    self.dockSurfaceController.rememberExpandedFrame(frame, for: window)
                     NSApp.activate()
                     window.makeKeyAndOrderFront(nil)
                     window.orderFrontRegardless()
@@ -376,10 +379,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
 
         let miniFrame = dockSurfaceController.currentMiniFrame ?? dockSurfaceController.miniFrame(on: window.screen)
-        let expandedFrame = dockSurfaceController.constrainedExpandedFrame(
-            dockSurfaceController.lastExpandedFrame ?? window.frame,
-            for: window
-        )
+        let restoreSize = dockSurfaceController.lastExpandedFrame?.size ?? window.frame.size
+        let expandedFrame = dockSurfaceController.bottomAnchoredFrame(for: window, size: restoreSize)
+            ?? dockSurfaceController.constrainedExpandedFrame(
+                dockSurfaceController.lastExpandedFrame ?? window.frame,
+                for: window
+            )
         let miniWindow = dockSurfaceController.currentMiniWindow
 
         dockSurfaceController.transition(
@@ -393,7 +398,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 window.displayIfNeeded()
             },
             revealDestination: {
+                window.setFrame(expandedFrame, display: true)
                 window.alphaValue = 1
+                self.dockSurfaceController.rememberExpandedFrame(expandedFrame, for: window)
                 NSApp.activate()
                 window.makeKeyAndOrderFront(nil)
                 window.orderFrontRegardless()

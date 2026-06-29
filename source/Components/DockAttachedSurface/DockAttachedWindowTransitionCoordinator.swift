@@ -23,6 +23,7 @@ final class DockAttachedWindowTransitionCoordinator {
         from sourceWindow: NSWindow?,
         sourceFrame: NSRect,
         to targetFrame: NSRect,
+        snapshotFadePolicy: TransitionSnapshotFadePolicy? = nil,
         prepareDestination: (@MainActor @Sendable () -> Void)? = nil,
         revealDestination: @escaping @MainActor @Sendable () -> Void,
         completion: (@MainActor @Sendable () -> Void)? = nil
@@ -38,6 +39,7 @@ final class DockAttachedWindowTransitionCoordinator {
                 sourceWindow: nil,
                 sourceFrame: sourceFrame,
                 targetFrame: targetFrame,
+                snapshotFadePolicy: snapshotFadePolicy,
                 prepareDestination: prepareDestination,
                 revealDestination: revealDestination,
                 completion: completion
@@ -52,6 +54,7 @@ final class DockAttachedWindowTransitionCoordinator {
                 sourceWindow: sourceWindow,
                 sourceFrame: sourceFrame,
                 targetFrame: targetFrame,
+                snapshotFadePolicy: snapshotFadePolicy,
                 prepareDestination: prepareDestination,
                 revealDestination: revealDestination,
                 completion: completion
@@ -65,6 +68,7 @@ final class DockAttachedWindowTransitionCoordinator {
         sourceWindow: NSWindow?,
         sourceFrame: NSRect,
         targetFrame: NSRect,
+        snapshotFadePolicy: TransitionSnapshotFadePolicy?,
         prepareDestination: (@MainActor @Sendable () -> Void)?,
         revealDestination: @escaping @MainActor @Sendable () -> Void,
         completion: (@MainActor @Sendable () -> Void)?
@@ -81,7 +85,11 @@ final class DockAttachedWindowTransitionCoordinator {
         sourceWindow?.orderOut(nil)
         prepareDestination?()
 
-        if shouldFadeSnapshotBeforeResize(from: sourceFrame, to: targetFrame) {
+        if shouldFadeSnapshotBeforeResize(
+            from: sourceFrame,
+            to: targetFrame,
+            policy: snapshotFadePolicy ?? configuration.snapshotFadePolicy
+        ) {
             fadeSnapshot(in: panel)
         }
 
@@ -97,6 +105,7 @@ final class DockAttachedWindowTransitionCoordinator {
             }
         } completionHandler: { [weak self, weak panel] in
             MainActor.assumeIsolated {
+                panel?.setFrame(targetFrame, display: true)
                 revealDestination()
 
                 guard let panel else {
@@ -183,8 +192,12 @@ final class DockAttachedWindowTransitionCoordinator {
         return panel
     }
 
-    private func shouldFadeSnapshotBeforeResize(from sourceFrame: NSRect, to targetFrame: NSRect) -> Bool {
-        switch configuration.snapshotFadePolicy {
+    private func shouldFadeSnapshotBeforeResize(
+        from sourceFrame: NSRect,
+        to targetFrame: NSRect,
+        policy: TransitionSnapshotFadePolicy
+    ) -> Bool {
+        switch policy {
         case .fadeBeforeResize:
             return true
         case .keepVisibleWhileShrinking:
@@ -231,9 +244,10 @@ final class DockAttachedTransitionSurfaceView: NSView {
         addSubview(surfaceView)
 
         imageView.image = snapshot
-        imageView.imageScaling = .scaleProportionallyUpOrDown
+        imageView.imageScaling = .scaleAxesIndependently
         imageView.autoresizingMask = [.width, .height]
         imageView.wantsLayer = true
+        imageView.layer?.contentsGravity = .resize
         imageView.layer?.cornerRadius = 10
         imageView.layer?.masksToBounds = true
         imageView.alphaValue = snapshot == nil ? 0 : 1

@@ -34,7 +34,7 @@ struct UpdateDetailsPopover: View {
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .frame(maxHeight: 150)
+                    .frame(minHeight: 190, maxHeight: 340)
                 }
             }
 
@@ -63,7 +63,7 @@ struct UpdateDetailsPopover: View {
             .controlSize(.small)
         }
         .padding(16)
-        .frame(width: 360, alignment: .leading)
+        .frame(width: 420, alignment: .leading)
     }
 
     private var header: some View {

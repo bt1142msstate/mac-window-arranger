@@ -51,6 +51,7 @@ final class DockAttachedWindowSurfaceController {
         from sourceWindow: NSWindow?,
         sourceFrame: NSRect,
         to targetFrame: NSRect,
+        snapshotFadePolicy: TransitionSnapshotFadePolicy? = nil,
         prepareDestination: (@MainActor @Sendable () -> Void)? = nil,
         revealDestination: @escaping @MainActor @Sendable () -> Void,
         completion: (@MainActor @Sendable () -> Void)? = nil
@@ -59,6 +60,7 @@ final class DockAttachedWindowSurfaceController {
             from: sourceWindow,
             sourceFrame: sourceFrame,
             to: targetFrame,
+            snapshotFadePolicy: snapshotFadePolicy,
             prepareDestination: prepareDestination,
             revealDestination: revealDestination,
             completion: completion
