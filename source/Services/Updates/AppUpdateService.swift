@@ -192,12 +192,9 @@ final class AppUpdateService: @unchecked Sendable {
         .resume()
     }
 
-    func downloadAndOpen(update: AppUpdate, completion: @escaping @Sendable (Result<URL, Error>) -> Void) {
+    func downloadAndInstall(update: AppUpdate, completion: @escaping @Sendable (Result<URL, Error>) -> Void) {
         guard let assetURL = update.assetDownloadURL else {
-            Task { @MainActor in
-                NSWorkspace.shared.open(update.releaseURL)
-                completion(.success(update.releaseURL))
-            }
+            completion(.failure(AppUpdateServiceError.missingDownloadAsset))
             return
         }
 
@@ -226,17 +223,49 @@ final class AppUpdateService: @unchecked Sendable {
             }
 
             do {
-                let destinationURL = try self.destinationURL(for: update)
+                let updateDirectoryURL = try self.temporaryUpdateDirectory()
+                let dmgURL = updateDirectoryURL.appendingPathComponent(
+                    self.sanitizedFileName(update.assetName ?? "Window Arranger \(update.version).dmg"),
+                    isDirectory: false
+                )
 
-                if self.fileManager.fileExists(atPath: destinationURL.path) {
-                    try self.fileManager.removeItem(at: destinationURL)
+                if self.fileManager.fileExists(atPath: dmgURL.path) {
+                    try self.fileManager.removeItem(at: dmgURL)
                 }
 
-                try self.fileManager.moveItem(at: temporaryURL, to: destinationURL)
+                try self.fileManager.moveItem(at: temporaryURL, to: dmgURL)
 
-                Task { @MainActor in
-                    NSWorkspace.shared.open(destinationURL)
-                    completion(.success(destinationURL))
+                var mountedUpdate: MountedUpdate?
+
+                do {
+                    mountedUpdate = try self.mountUpdateDMG(dmgURL, in: updateDirectoryURL)
+                    guard let mountedUpdate else {
+                        throw AppUpdateServiceError.appBundleNotFound
+                    }
+
+                    try self.validateMountedUpdate(mountedUpdate, for: update)
+
+                    let destinationURL = try self.installDestinationURL()
+                    try self.validateInstallDestination(destinationURL)
+                    try self.launchInstaller(
+                        mountedUpdate: mountedUpdate,
+                        destinationURL: destinationURL,
+                        cleanupDirectoryURL: updateDirectoryURL
+                    )
+
+                    Task { @MainActor in
+                        completion(.success(destinationURL))
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                            NSApp.terminate(nil)
+                        }
+                    }
+                } catch {
+                    if let mountedUpdate {
+                        self.detachMountedUpdate(mountedUpdate)
+                    }
+
+                    try? self.fileManager.removeItem(at: updateDirectoryURL)
+                    throw error
                 }
             } catch {
                 completion(.failure(error))
@@ -282,13 +311,9 @@ final class AppUpdateService: @unchecked Sendable {
         }
     }
 
-    private func destinationURL(for update: AppUpdate) throws -> URL {
-        let downloadsDirectory = fileManager.urls(for: .downloadsDirectory, in: .userDomainMask).first
-            ?? fileManager.temporaryDirectory
-        let rawFileName = update.assetName ?? "Window Arranger \(update.version).dmg"
-        let fileName = sanitizedFileName(rawFileName)
-
-        return downloadsDirectory.appendingPathComponent(fileName, isDirectory: false)
+    private struct MountedUpdate {
+        let mountPointURL: URL
+        let appBundleURL: URL
     }
 
     private func sanitizedFileName(_ rawFileName: String) -> String {
@@ -299,6 +324,237 @@ final class AppUpdateService: @unchecked Sendable {
         let fileName = String(scalars).trimmingCharacters(in: .whitespacesAndNewlines)
 
         return fileName.isEmpty ? "Window Arranger.dmg" : fileName
+    }
+
+    private func temporaryUpdateDirectory() throws -> URL {
+        let parentDirectoryURL = fileManager.temporaryDirectory
+            .appendingPathComponent("Window Arranger Updates", isDirectory: true)
+        let updateDirectoryURL = parentDirectoryURL
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+
+        try fileManager.createDirectory(
+            at: updateDirectoryURL,
+            withIntermediateDirectories: true
+        )
+
+        return updateDirectoryURL
+    }
+
+    private func mountUpdateDMG(_ dmgURL: URL, in updateDirectoryURL: URL) throws -> MountedUpdate {
+        let mountPointURL = updateDirectoryURL.appendingPathComponent("mount", isDirectory: true)
+        try fileManager.createDirectory(at: mountPointURL, withIntermediateDirectories: true)
+
+        _ = try runProcess(
+            executablePath: "/usr/bin/hdiutil",
+            arguments: ["attach", dmgURL.path, "-readonly", "-nobrowse", "-mountpoint", mountPointURL.path]
+        )
+
+        guard let appBundleURL = try appBundleURL(in: mountPointURL) else {
+            throw AppUpdateServiceError.appBundleNotFound
+        }
+
+        return MountedUpdate(mountPointURL: mountPointURL, appBundleURL: appBundleURL)
+    }
+
+    private func appBundleURL(in directoryURL: URL) throws -> URL? {
+        let contents = try fileManager.contentsOfDirectory(
+            at: directoryURL,
+            includingPropertiesForKeys: nil
+        )
+
+        return contents.first { url in
+            url.lastPathComponent == "Window Arranger.app"
+        } ?? contents.first { url in
+            url.pathExtension == "app"
+        }
+    }
+
+    private func validateMountedUpdate(_ mountedUpdate: MountedUpdate, for update: AppUpdate) throws {
+        guard let currentBundleIdentifier = bundle.bundleIdentifier else {
+            throw AppUpdateServiceError.invalidCurrentBundle
+        }
+
+        guard let updateBundle = Bundle(url: mountedUpdate.appBundleURL) else {
+            throw AppUpdateServiceError.invalidUpdateBundle
+        }
+
+        guard updateBundle.bundleIdentifier == currentBundleIdentifier else {
+            throw AppUpdateServiceError.bundleIdentifierMismatch
+        }
+
+        let updateVersion = (updateBundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "0"
+        guard compareVersions(updateVersion, currentVersion) == .orderedDescending else {
+            throw AppUpdateServiceError.updateIsNotNewer
+        }
+
+        guard normalizedVersionString(update.version) == normalizedVersionString(updateVersion) else {
+            throw AppUpdateServiceError.releaseVersionMismatch
+        }
+
+        _ = try runProcess(
+            executablePath: "/usr/bin/codesign",
+            arguments: ["--verify", "--deep", "--strict", mountedUpdate.appBundleURL.path]
+        )
+
+        let currentRequirement = try designatedRequirement(for: bundle.bundleURL)
+        let updateRequirement = try designatedRequirement(for: mountedUpdate.appBundleURL)
+
+        guard currentRequirement == updateRequirement else {
+            throw AppUpdateServiceError.signingRequirementMismatch
+        }
+    }
+
+    private func installDestinationURL() throws -> URL {
+        let currentBundleURL = bundle.bundleURL.standardizedFileURL
+        let homeApplicationsURL = fileManager.homeDirectoryForCurrentUser
+            .appendingPathComponent("Applications", isDirectory: true)
+            .standardizedFileURL
+
+        if currentBundleURL.pathExtension == "app",
+           !currentBundleURL.path.hasPrefix("/Volumes/"),
+           !currentBundleURL.path.hasPrefix(fileManager.temporaryDirectory.standardizedFileURL.path),
+           (currentBundleURL.path.hasPrefix("/Applications/") || currentBundleURL.path.hasPrefix(homeApplicationsURL.path + "/")) {
+            return currentBundleURL
+        }
+
+        return URL(fileURLWithPath: "/Applications/Window Arranger.app", isDirectory: true)
+    }
+
+    private func validateInstallDestination(_ destinationURL: URL) throws {
+        let parentDirectoryURL = destinationURL.deletingLastPathComponent()
+
+        if !fileManager.fileExists(atPath: parentDirectoryURL.path) {
+            try fileManager.createDirectory(at: parentDirectoryURL, withIntermediateDirectories: true)
+        }
+
+        guard fileManager.isWritableFile(atPath: parentDirectoryURL.path) else {
+            throw AppUpdateServiceError.installLocationNotWritable(parentDirectoryURL.path)
+        }
+    }
+
+    private func launchInstaller(
+        mountedUpdate: MountedUpdate,
+        destinationURL: URL,
+        cleanupDirectoryURL: URL
+    ) throws {
+        let scriptURL = cleanupDirectoryURL.appendingPathComponent("install-window-arranger-update.sh", isDirectory: false)
+        let script = """
+        #!/bin/sh
+        set -eu
+
+        current_pid="$1"
+        source_app="$2"
+        destination_app="$3"
+        mount_point="$4"
+        cleanup_dir="$5"
+        app_name="$6"
+        log_file="$cleanup_dir/install.log"
+
+        {
+          while kill -0 "$current_pid" 2>/dev/null; do
+            sleep 0.2
+          done
+
+          parent_dir="$(dirname "$destination_app")"
+          mkdir -p "$parent_dir"
+
+          tmp_app="$parent_dir/.$app_name.update.$$"
+          backup_app="$parent_dir/.$app_name.previous.$$"
+          rm -rf "$tmp_app" "$backup_app"
+
+          ditto "$source_app" "$tmp_app"
+          xattr -cr "$tmp_app"
+          codesign --verify --deep --strict "$tmp_app"
+
+          if [ -d "$destination_app" ]; then
+            mv "$destination_app" "$backup_app"
+          fi
+
+          if mv "$tmp_app" "$destination_app"; then
+            rm -rf "$backup_app"
+          else
+            if [ -d "$backup_app" ]; then
+              mv "$backup_app" "$destination_app"
+            fi
+            exit 1
+          fi
+
+          hdiutil detach "$mount_point" -quiet || true
+          open "$destination_app"
+          rm -rf "$cleanup_dir"
+        } >> "$log_file" 2>&1 &
+        """
+
+        try script.write(to: scriptURL, atomically: true, encoding: .utf8)
+        try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = [
+            scriptURL.path,
+            String(ProcessInfo.processInfo.processIdentifier),
+            mountedUpdate.appBundleURL.path,
+            destinationURL.path,
+            mountedUpdate.mountPointURL.path,
+            cleanupDirectoryURL.path,
+            destinationURL.deletingPathExtension().lastPathComponent
+        ]
+
+        try process.run()
+        process.waitUntilExit()
+
+        guard process.terminationStatus == 0 else {
+            throw AppUpdateServiceError.installerLaunchFailed
+        }
+    }
+
+    private func detachMountedUpdate(_ mountedUpdate: MountedUpdate) {
+        _ = try? runProcess(
+            executablePath: "/usr/bin/hdiutil",
+            arguments: ["detach", mountedUpdate.mountPointURL.path, "-quiet"]
+        )
+    }
+
+    private func designatedRequirement(for appBundleURL: URL) throws -> String {
+        let output = try runProcess(
+            executablePath: "/usr/bin/codesign",
+            arguments: ["-d", "--requirements", "-", appBundleURL.path]
+        )
+
+        let prefix = "designated => "
+        guard let requirementLine = output
+            .split(whereSeparator: \.isNewline)
+            .first(where: { $0.hasPrefix(prefix) })
+        else {
+            throw AppUpdateServiceError.missingDesignatedRequirement
+        }
+
+        return String(requirementLine.dropFirst(prefix.count))
+    }
+
+    private func runProcess(executablePath: String, arguments: [String]) throws -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executablePath)
+        process.arguments = arguments
+
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+
+        try process.run()
+        process.waitUntilExit()
+
+        var outputData = Data()
+        outputData.append(outputPipe.fileHandleForReading.readDataToEndOfFile())
+        outputData.append(errorPipe.fileHandleForReading.readDataToEndOfFile())
+
+        let output = String(data: outputData, encoding: .utf8) ?? ""
+        guard process.terminationStatus == 0 else {
+            throw AppUpdateServiceError.commandFailed((executablePath as NSString).lastPathComponent, output)
+        }
+
+        return output
     }
 
     private func isNewerThanCurrent(_ update: AppUpdate) -> Bool {
@@ -357,6 +613,18 @@ enum AppUpdateServiceError: LocalizedError {
     case noRelease
     case badStatus(Int)
     case missingData
+    case missingDownloadAsset
+    case invalidCurrentBundle
+    case invalidUpdateBundle
+    case bundleIdentifierMismatch
+    case updateIsNotNewer
+    case releaseVersionMismatch
+    case appBundleNotFound
+    case signingRequirementMismatch
+    case missingDesignatedRequirement
+    case installLocationNotWritable(String)
+    case installerLaunchFailed
+    case commandFailed(String, String)
 
     var errorDescription: String? {
         switch self {
@@ -370,6 +638,35 @@ enum AppUpdateServiceError: LocalizedError {
             return "GitHub returned HTTP \(statusCode)."
         case .missingData:
             return "The update response was empty."
+        case .missingDownloadAsset:
+            return "The release does not include a DMG update."
+        case .invalidCurrentBundle:
+            return "The running app bundle could not be validated."
+        case .invalidUpdateBundle:
+            return "The downloaded app bundle could not be read."
+        case .bundleIdentifierMismatch:
+            return "The downloaded app does not match Window Arranger."
+        case .updateIsNotNewer:
+            return "The downloaded app is not newer than the installed version."
+        case .releaseVersionMismatch:
+            return "The downloaded app version does not match the GitHub release."
+        case .appBundleNotFound:
+            return "The downloaded DMG did not contain Window Arranger.app."
+        case .signingRequirementMismatch:
+            return "The downloaded app is signed by a different identity, so it was not installed automatically."
+        case .missingDesignatedRequirement:
+            return "The app signing requirement could not be read."
+        case .installLocationNotWritable(let path):
+            return "Window Arranger could not write to \(path). Install the DMG manually or move the app to a writable Applications folder."
+        case .installerLaunchFailed:
+            return "The update installer could not be started."
+        case .commandFailed(let command, let output):
+            let trimmedOutput = output.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedOutput.isEmpty else {
+                return "\(command) failed while preparing the update."
+            }
+
+            return "\(command) failed: \(trimmedOutput)"
         }
     }
 }

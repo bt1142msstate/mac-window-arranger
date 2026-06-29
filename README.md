@@ -27,7 +27,7 @@ Mac Window Arranger is a small native macOS SwiftUI utility for resizing and arr
 - Restore minimized saved-layout windows before arranging them.
 - Start in Mini Mode, switch saved layouts from the compact control, and return to a small Dock-adjacent control after successful actions.
 - Call the app from Shortcuts, scripts, launchers, or other macOS apps with the `window-arranger://` URL scheme.
-- Check GitHub releases automatically, view latest release notes from the expanded toolbar, and download/open the latest DMG from inside the app.
+- Check GitHub releases automatically, view latest release notes from the expanded toolbar, and install the latest DMG from inside the app.
 - Report bugs, request features, or ask questions from Help > Report an Issue with a safe diagnostics copy button.
 - Preserve local Accessibility permission across rebuilds with stable signing metadata.
 
@@ -36,7 +36,7 @@ Mac Window Arranger is a small native macOS SwiftUI utility for resizing and arr
 - Built as a local signed, hardened-runtime universal macOS app (`arm64` and `x86_64`).
 - Installed by the build script at `/Applications/Window Arranger.app`.
 - Privacy manifest is bundled at `Contents/Resources/PrivacyInfo.xcprivacy`.
-- Direct-download builds include GitHub release update checks with a one-click DMG download/open flow.
+- Direct-download builds include GitHub release update checks with a one-click install-and-relaunch flow.
 - Planned public release: low-cost paid Mac App Store version, likely around $2 to $4, to support continued development.
 - Current App Store blocker: App Sandbox is intentionally disabled because sandboxed builds cannot access other apps' windows through Accessibility. Developer ID signing plus notarization is the fallback path while that blocker is unresolved.
 
@@ -74,7 +74,7 @@ The bundled DMG is signed for local validation. Public direct-download releases 
 
 ## Updates
 
-Direct-download builds check the latest GitHub Release once per day and cache any available update. You can also use the expanded toolbar update icon, Help > Check for Updates, or `window-arranger://check-updates`. The expanded toolbar popover shows the installed version, latest release version, and GitHub release notes. When a newer release has a DMG asset, the in-app Download button saves it to Downloads and opens it.
+Direct-download builds check the latest GitHub Release once per day and cache any available update. You can also use the expanded toolbar update icon, Help > Check for Updates, or `window-arranger://check-updates`. The expanded toolbar popover shows the installed version, latest release version, and GitHub release notes. When a newer release has a DMG asset, the in-app Install Update button downloads the DMG, verifies the app bundle and signing identity, replaces the installed app, and relaunches Window Arranger. If macOS blocks writing to the install location, open the release DMG manually and drag the app into Applications.
 
 Mac App Store builds should disable the GitHub update check and use Apple's App Store update flow.
 

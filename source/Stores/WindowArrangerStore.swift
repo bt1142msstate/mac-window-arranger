@@ -151,7 +151,7 @@ final class WindowArrangerStore {
         switch updateStatus {
         case .idle:
             return false
-        case .checking, .upToDate, .available, .downloading, .downloaded, .failed:
+        case .checking, .upToDate, .available, .downloading, .installing, .failed:
             return true
         }
     }
@@ -565,18 +565,18 @@ final class WindowArrangerStore {
         checkForUpdates(isAutomatic: true)
     }
 
-    func downloadAvailableUpdate() {
+    func installAvailableUpdate() {
         guard let update = activeUpdate else {
             return
         }
 
         updateStatus = .downloading(update)
 
-        updateService.downloadAndOpen(update: update) { result in
+        updateService.downloadAndInstall(update: update) { result in
             DispatchQueue.main.async {
                 switch result {
-                case .success(let url):
-                    self.updateStatus = .downloaded(update, url)
+                case .success:
+                    self.updateStatus = .installing(update)
                 case .failure(let error):
                     self.updateStatus = .failed(self.updateErrorMessage(error))
                 }
@@ -834,7 +834,7 @@ final class WindowArrangerStore {
 
     private var activeUpdate: AppUpdate? {
         switch updateStatus {
-        case .available(let update), .downloading(let update), .downloaded(let update, _):
+        case .available(let update), .downloading(let update), .installing(let update):
             return update
         case .idle, .checking, .upToDate, .failed:
             return nil
@@ -852,9 +852,9 @@ final class WindowArrangerStore {
 
     private func checkForUpdates(isAutomatic: Bool) {
         switch updateStatus {
-        case .checking, .downloading:
+        case .checking, .downloading, .installing:
             return
-        case .idle, .upToDate, .available, .downloaded, .failed:
+        case .idle, .upToDate, .available, .failed:
             break
         }
 

@@ -14,8 +14,8 @@ Accessibility on this Mac, which breaks the app's core feature.
 - `UserDefaults` required-reason API declaration using reason `CA92.1`.
 - In-app Privacy Policy window from the Help menu.
 - Local privacy policy draft at `docs/PRIVACY.md`.
-- GitHub release update checks for direct-download builds, with a one-click DMG
-  download/open flow.
+- GitHub release update checks for direct-download builds, with a one-click
+  install-and-relaunch flow.
 - GitHub issue-reporting entry points for direct-download builds, with safe
   diagnostics that users can copy manually.
 - App category, copyright, export-compliance, Accessibility and Screen

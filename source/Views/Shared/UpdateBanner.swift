@@ -3,7 +3,7 @@ import SwiftUI
 struct UpdateBanner: View {
     let status: AppUpdateStatus
     let checkAction: () -> Void
-    let downloadAction: () -> Void
+    let installAction: () -> Void
     let releaseNotesAction: () -> Void
     let dismissAction: () -> Void
 
@@ -40,7 +40,7 @@ struct UpdateBanner: View {
     @ViewBuilder
     private var leadingIcon: some View {
         switch status {
-        case .checking, .downloading:
+        case .checking, .downloading, .installing:
             ProgressView()
                 .controlSize(.small)
                 .frame(width: 18)
@@ -56,8 +56,8 @@ struct UpdateBanner: View {
         HStack(spacing: 7) {
             switch status {
             case .available:
-                Button(action: downloadAction) {
-                    Label("Download Update", systemImage: "arrow.down.circle")
+                Button(action: installAction) {
+                    Label("Install Update", systemImage: "arrow.down.circle")
                 }
                 .buttonStyle(.borderedProminent)
 
@@ -68,7 +68,7 @@ struct UpdateBanner: View {
                 .help("Open release notes")
 
                 dismissButton
-            case .upToDate, .downloaded:
+            case .upToDate:
                 dismissButton
             case .failed:
                 Button(action: checkAction) {
@@ -77,7 +77,7 @@ struct UpdateBanner: View {
                 .buttonStyle(.bordered)
 
                 dismissButton
-            case .idle, .checking, .downloading:
+            case .idle, .checking, .downloading, .installing:
                 EmptyView()
             }
         }
@@ -105,8 +105,8 @@ struct UpdateBanner: View {
             return "\(update.title) is available"
         case .downloading(let update):
             return "Downloading \(update.title)..."
-        case .downloaded:
-            return "Update opened"
+        case .installing:
+            return "Installing update..."
         case .failed:
             return "Update check failed"
         }
@@ -119,15 +119,11 @@ struct UpdateBanner: View {
         case .upToDate(let version, _):
             return "Installed version \(version)."
         case .available(let update):
-            return update.assetName ?? "Open the latest GitHub release."
+            return update.assetName.map { "Installs automatically from \($0)." } ?? "Installs automatically from the latest GitHub release."
         case .downloading(let update):
             return update.assetName ?? "Downloading from GitHub."
-        case .downloaded(let update, let url):
-            if url == update.releaseURL {
-                return "Opened the GitHub release page."
-            }
-
-            return "Opened \(url.lastPathComponent)."
+        case .installing:
+            return "Window Arranger will relaunch when the update is installed."
         case .failed(let message):
             return message
         }
@@ -135,14 +131,12 @@ struct UpdateBanner: View {
 
     private var symbolName: String {
         switch status {
-        case .idle, .checking, .downloading:
+        case .idle, .checking, .downloading, .installing:
             return "arrow.down.circle"
         case .upToDate:
             return "checkmark.circle.fill"
         case .available:
             return "arrow.down.circle.fill"
-        case .downloaded:
-            return "checkmark.circle.fill"
         case .failed:
             return "exclamationmark.triangle.fill"
         }
@@ -150,9 +144,9 @@ struct UpdateBanner: View {
 
     private var accentColor: Color {
         switch status {
-        case .available, .downloading:
+        case .available, .downloading, .installing:
             return .blue
-        case .upToDate, .downloaded:
+        case .upToDate:
             return .green
         case .failed:
             return .orange

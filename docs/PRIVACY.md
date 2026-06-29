@@ -8,7 +8,7 @@ layouts stay on the device. Saved layouts are stored locally in the app's
 preferences using `UserDefaults`.
 
 Direct-download builds contact GitHub's latest-release endpoint to check for
-updates and download the release DMG when you choose to update. The update check
+updates and download the release DMG when you choose to install an update. The update check
 does not send window titles, saved layouts, app selections, or other app data.
 
 When you choose Help > Report an Issue, the app can open GitHub issue-reporting

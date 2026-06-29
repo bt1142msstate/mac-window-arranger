@@ -24,7 +24,7 @@ struct ContentView: View {
                     UpdateBanner(
                         status: store.updateStatus,
                         checkAction: store.checkForUpdates,
-                        downloadAction: store.downloadAvailableUpdate,
+                        installAction: store.installAvailableUpdate,
                         releaseNotesAction: store.openAvailableUpdateReleasePage,
                         dismissAction: store.dismissUpdateStatus
                     )
@@ -63,7 +63,7 @@ struct ContentView: View {
                         installedVersion: store.installedVersionDisplay,
                         latestUpdate: store.latestUpdate,
                         checkAction: store.checkForUpdates,
-                        downloadAction: store.downloadAvailableUpdate,
+                        installAction: store.installAvailableUpdate,
                         releaseNotesAction: store.openLatestUpdateReleasePage
                     )
                 }
@@ -115,11 +115,11 @@ struct ContentView: View {
         switch status {
         case .available:
             return "arrow.down.circle.fill"
-        case .upToDate, .downloaded:
+        case .upToDate:
             return "checkmark.circle"
         case .failed:
             return "exclamationmark.triangle"
-        case .idle, .checking, .downloading:
+        case .idle, .checking, .downloading, .installing:
             return "arrow.triangle.2.circlepath"
         }
     }

@@ -29,6 +29,6 @@ enum AppUpdateStatus: Equatable {
     case upToDate(version: String, latestUpdate: AppUpdate?)
     case available(AppUpdate)
     case downloading(AppUpdate)
-    case downloaded(AppUpdate, URL)
+    case installing(AppUpdate)
     case failed(String)
 }

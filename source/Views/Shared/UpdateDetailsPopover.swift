@@ -5,7 +5,7 @@ struct UpdateDetailsPopover: View {
     let installedVersion: String
     let latestUpdate: AppUpdate?
     let checkAction: () -> Void
-    let downloadAction: () -> Void
+    let installAction: () -> Void
     let releaseNotesAction: () -> Void
 
     var body: some View {
@@ -44,9 +44,9 @@ struct UpdateDetailsPopover: View {
                 }
                 .buttonStyle(.bordered)
 
-                if canDownloadUpdate {
-                    Button(action: downloadAction) {
-                        Label("Download Update", systemImage: "arrow.down.circle")
+                if canInstallUpdate {
+                    Button(action: installAction) {
+                        Label("Install Update", systemImage: "arrow.down.circle")
                     }
                     .buttonStyle(.borderedProminent)
                 }
@@ -84,7 +84,7 @@ struct UpdateDetailsPopover: View {
     @ViewBuilder
     private var icon: some View {
         switch status {
-        case .checking, .downloading:
+        case .checking, .downloading, .installing:
             ProgressView()
                 .controlSize(.small)
                 .frame(width: 24, height: 24)
@@ -153,7 +153,7 @@ struct UpdateDetailsPopover: View {
         return notes
     }
 
-    private var canDownloadUpdate: Bool {
+    private var canInstallUpdate: Bool {
         switch status {
         case .available:
             return true
@@ -178,8 +178,8 @@ struct UpdateDetailsPopover: View {
             return "Version \(update.version) available"
         case .downloading(let update):
             return "Downloading \(update.version)"
-        case .downloaded:
-            return "Update opened"
+        case .installing(let update):
+            return "Installing \(update.version)"
         case .failed:
             return "Check failed"
         }
@@ -205,12 +205,8 @@ struct UpdateDetailsPopover: View {
             return "A newer GitHub release is available: \(update.title)."
         case .downloading(let update):
             return "Downloading \(update.assetName ?? update.title)..."
-        case .downloaded(let update, let url):
-            if url == update.releaseURL {
-                return "Opened the GitHub release page."
-            }
-
-            return "Opened \(url.lastPathComponent)."
+        case .installing:
+            return "Installing the update and relaunching Window Arranger."
         case .failed(let message):
             return message
         }
@@ -218,9 +214,9 @@ struct UpdateDetailsPopover: View {
 
     private var statusSymbolName: String {
         switch status {
-        case .idle, .checking, .downloading:
+        case .idle, .checking, .downloading, .installing:
             return "arrow.triangle.2.circlepath"
-        case .upToDate, .downloaded:
+        case .upToDate:
             return "checkmark.circle.fill"
         case .available:
             return "arrow.down.circle.fill"
@@ -231,9 +227,9 @@ struct UpdateDetailsPopover: View {
 
     private var statusColor: Color {
         switch status {
-        case .available, .downloading:
+        case .available, .downloading, .installing:
             return .blue
-        case .upToDate, .downloaded:
+        case .upToDate:
             return .green
         case .failed:
             return .orange

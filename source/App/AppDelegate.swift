@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     static weak var shared: AppDelegate?
 
     private let dockSurfaceController = DockAttachedWindowSurfaceController(
@@ -60,6 +60,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool {
         false
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showExpandedWindow()
+        return false
+    }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        guard sender === mainWindow || sender === fallbackMainWindow else {
+            return true
+        }
+
+        NSApp.terminate(nil)
+        return false
     }
 
     @objc func showExpandedWindowFromMenu(_ sender: Any?) {
@@ -628,7 +642,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func makeFallbackMainWindow() -> NSWindow {
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: WindowWorkflowMode.arrange.contentSize),
-            styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
+            styleMask: [.titled, .closable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
@@ -714,6 +728,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func configureMainWindow(_ window: NSWindow) {
         window.title = "Window Arranger"
         window.titlebarAppearsTransparent = true
+        window.delegate = self
+        window.styleMask.remove(.miniaturizable)
+        window.standardWindowButton(.miniaturizeButton)?.isHidden = true
         window.standardWindowButton(.zoomButton)?.isHidden = true
         window.level = .floating
         window.animationBehavior = .none
