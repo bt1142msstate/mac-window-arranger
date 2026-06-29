@@ -90,6 +90,7 @@ ensure_local_signing_identity() {
     security unlock-keychain -p "$SIGNING_KEYCHAIN_PASSWORD" "$SIGNING_KEYCHAIN" >/dev/null
 
     local imported_p12="$SIGNING_DIR/window-arranger-signing-import.p12"
+    local imported_certificate="$SIGNING_DIR/window-arranger-signing-import.cert.pem"
     printf '%s' "$SIGNING_CERTIFICATE_BASE64" | base64 --decode > "$imported_p12"
 
     security import "$imported_p12" \
@@ -97,13 +98,25 @@ ensure_local_signing_identity() {
       -P "$SIGNING_P12_PASSWORD" \
       -T /usr/bin/codesign >/dev/null
 
+    security find-certificate \
+      -c "$SIGNING_IDENTITY" \
+      -p \
+      "$SIGNING_KEYCHAIN" > "$imported_certificate"
+
+    security add-trusted-cert \
+      -d \
+      -r trustRoot \
+      -p codeSign \
+      -k "$SIGNING_KEYCHAIN" \
+      "$imported_certificate" >/dev/null
+
     security set-key-partition-list \
       -S apple-tool:,apple: \
       -s \
       -k "$SIGNING_KEYCHAIN_PASSWORD" \
       "$SIGNING_KEYCHAIN" >/dev/null
 
-    rm -f "$imported_p12"
+    rm -f "$imported_p12" "$imported_certificate"
 
     if security find-identity -v -p codesigning "$SIGNING_KEYCHAIN" 2>/dev/null | grep -F "\"$SIGNING_IDENTITY\"" >/dev/null; then
       return
