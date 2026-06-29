@@ -109,7 +109,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let existingInstance = NSRunningApplication
             .runningApplications(withBundleIdentifier: bundleIdentifier)
             .first { application in
-                application.processIdentifier != currentProcessIdentifier && !application.isTerminated
+                application.processIdentifier != currentProcessIdentifier
+                    && !application.isTerminated
+                    && Self.isProcessRunning(application.processIdentifier)
             }
 
         guard let existingInstance else {
@@ -118,6 +120,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         existingInstance.activate(options: [.activateAllWindows])
         return true
+    }
+
+    nonisolated private static func isProcessRunning(_ processIdentifier: pid_t) -> Bool {
+        guard processIdentifier > 0 else {
+            return false
+        }
+
+        return kill(processIdentifier, 0) == 0 || errno == EPERM
     }
 
     func showCompactStatus(message: String, kind: ResizeStatusKind) {

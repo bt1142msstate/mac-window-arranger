@@ -448,6 +448,7 @@ final class AppUpdateService: @unchecked Sendable {
         mount_point="$4"
         cleanup_dir="$5"
         app_name="$6"
+        executable_name="$7"
         log_file="$cleanup_dir/install.log"
 
         {
@@ -480,7 +481,31 @@ final class AppUpdateService: @unchecked Sendable {
           fi
 
           hdiutil detach "$mount_point" -quiet || true
-          open "$destination_app"
+
+          launched=0
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if /usr/bin/open -n "$destination_app"; then
+              for wait_attempt in 1 2 3 4 5; do
+                if /usr/bin/pgrep -x "$executable_name" >/dev/null 2>&1; then
+                  launched=1
+                  break
+                fi
+                sleep 0.25
+              done
+            fi
+
+            if [ "$launched" -eq 1 ]; then
+              break
+            fi
+
+            sleep 0.5
+          done
+
+          if [ "$launched" -ne 1 ]; then
+            echo "Failed to relaunch $destination_app"
+            exit 1
+          fi
+
           rm -rf "$cleanup_dir"
         } >> "$log_file" 2>&1 &
         """
@@ -497,7 +522,8 @@ final class AppUpdateService: @unchecked Sendable {
             destinationURL.path,
             mountedUpdate.mountPointURL.path,
             cleanupDirectoryURL.path,
-            destinationURL.deletingPathExtension().lastPathComponent
+            destinationURL.deletingPathExtension().lastPathComponent,
+            bundle.executableURL?.lastPathComponent ?? destinationURL.deletingPathExtension().lastPathComponent
         ]
 
         try process.run()
